@@ -2,7 +2,9 @@
 // read with bilinear interpolation. Derived data; not part of saved state.
 
 import type { MapDef } from '../data/map';
+import { SCENERY } from '../data/tunables';
 import { fbm, smoothstep } from './noise';
+import { hash2 } from './rng';
 
 export interface Terrain {
   size: number;
@@ -11,7 +13,22 @@ export interface Terrain {
   heights: Float32Array;
   /** Deposit index per 1 m cell, -1 if none. */
   depositCell: Int16Array;
+  /** Trees and boulders, in a fixed order; state records which have been cleared. */
+  scenery: Scenery[];
   map: MapDef;
+}
+
+export type SceneryKind = 'tree' | 'snag' | 'boulder';
+
+export interface Scenery {
+  kind: SceneryKind;
+  x: number;
+  z: number;
+  /** Radius that blocks haulers, metres. */
+  r: number;
+  /** Size multiplier and rotation, for drawing. */
+  s: number;
+  rot: number;
 }
 
 function plateauLift(map: MapDef, x: number, z: number): number {
@@ -78,7 +95,54 @@ export function createTerrain(map: MapDef): Terrain {
       }
     }
   });
-  return { size, n, heights, depositCell, map };
+  const t: Terrain = { size, n, heights, depositCell, scenery: [], map };
+  t.scenery = generateScenery(t);
+  return t;
+}
+
+/** How wooded a point is: above SCENERY.forestLevel, trees grow. */
+export function forestAt(map: MapDef, x: number, z: number): number {
+  return fbm(x, z, map.seed + 911, 46, 3);
+}
+
+function sceneryAllowed(t: Terrain, x: number, z: number, hubClear: number, depositClear: number, maxSlope: number): boolean {
+  const map = t.map;
+  if (x < 5 || z < 5 || x > t.size - 5 || z > t.size - 5) return false;
+  if (Math.hypot(x - map.hub.x, z - map.hub.z) < hubClear) return false;
+  for (const d of map.deposits) if (Math.hypot(x - d.x, z - d.z) < d.r + depositClear) return false;
+  return cellSlope(t, Math.floor(x), Math.floor(z)) <= maxSlope;
+}
+
+function generateScenery(t: Terrain): Scenery[] {
+  const map = t.map;
+  const out: Scenery[] = [];
+  const S = SCENERY;
+  const seed = map.seed ^ 0x51ce;
+  const g = S.treeGrid;
+  for (let j = 0; j * g < t.size; j++) {
+    for (let i = 0; i * g < t.size; i++) {
+      const x = (i + 0.15 + 0.7 * hash2(i, j, seed)) * g;
+      const z = (j + 0.15 + 0.7 * hash2(i, j, seed + 1)) * g;
+      const f = forestAt(map, x, z);
+      const chance = f > S.forestLevel ? Math.min(1, (f - S.forestLevel) * 5) * S.forestDensity : S.loneTree;
+      if (hash2(i, j, seed + 2) >= chance) continue;
+      if (!sceneryAllowed(t, x, z, S.hubClear, S.depositClear, S.maxSlope)) continue;
+      const dead = hash2(i, j, seed + 3) < S.snags;
+      out.push({ kind: dead ? 'snag' : 'tree', x, z, r: 0.6, s: 0.72 + 0.6 * hash2(i, j, seed + 4), rot: hash2(i, j, seed + 5) * Math.PI * 2 });
+    }
+  }
+  const b = S.boulderGrid;
+  for (let j = 0; j * b < t.size; j++) {
+    for (let i = 0; i * b < t.size; i++) {
+      if (hash2(i, j, seed + 10) >= S.boulderChance) continue;
+      const x = (i + hash2(i, j, seed + 11)) * b;
+      const z = (j + hash2(i, j, seed + 12)) * b;
+      if (!sceneryAllowed(t, x, z, S.hubClear * 0.7, 3, 0.5)) continue;
+      const s = 0.9 + 1.4 * hash2(i, j, seed + 13);
+      out.push({ kind: 'boulder', x, z, r: s * 0.55, s, rot: hash2(i, j, seed + 14) * Math.PI * 2 });
+    }
+  }
+  return out;
 }
 
 export function heightAt(t: Terrain, x: number, z: number): number {

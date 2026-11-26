@@ -66,3 +66,25 @@ export const DISPATCH = {
   /** Outputs are tidied into the hub once this many are waiting, or when full. */
   tidyMin: 4,
 };
+
+/** Trees and boulders: generated from the map seed, solid to haulers, cleared by building. */
+export const SCENERY = {
+  /** Nothing grows this close to the hub, metres. */
+  hubClear: 40,
+  /** Nor this far beyond a deposit's edge. */
+  depositClear: 7,
+  /** Spacing of candidate tree positions, metres. */
+  treeGrid: 3.0,
+  /** Forest-noise level above which trees grow, and how fast they thicken. */
+  forestLevel: 0.06,
+  forestDensity: 0.8,
+  /** Chance of a lone tree outside forest. */
+  loneTree: 0.014,
+  /** Fraction of trees that are dead. */
+  snags: 0.07,
+  maxSlope: 0.3,
+  boulderGrid: 9,
+  boulderChance: 0.07,
+  /** A building clears scenery this far beyond its body, metres. */
+  buildMargin: 1.2,
+};

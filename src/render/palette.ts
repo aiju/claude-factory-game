@@ -3,21 +3,32 @@
 import type { ItemId } from '../data/items';
 
 export const PALETTE = {
-  // A dry, dusty world.
-  ground: 0x7f7565,
-  groundCool: 0x706d64,
-  groundDry: 0x928168,
+  // A cold, scrubby upland: muted grass, bare dirt, grey rock, dark conifers.
+  ground: 0x5b654a,
+  groundCool: 0x4c5b4d,
+  groundDry: 0x7c7650,
+  dirt: 0x6a5f50,
+  rock: 0x7b7772,
   cliff: 0x5d5a57,
   cliffShadow: 0x454341,
-  track: 0x9c8e78,
+  track: 0x8a7a64,
   road: 0x45464a,
   roadMark: 0xcfc8b6,
-  skyTop: 0xaebbc6,
-  skyHorizon: 0xd8cdbb,
+  skyTop: 0x9db0c2,
+  skyHorizon: 0xcdd1cb,
   /** What the sky lights the scene with from below the horizon. */
-  skyGround: 0x5b5548,
+  skyGround: 0x4f5446,
   /** Dust that settles on and around everything. */
-  dust: 0x85786a,
+  dust: 0x7d6f5c,
+  bark: 0x4a4038,
+  deadwood: 0x756c62,
+  foliage: 0x24342d,
+  foliageLight: 0x3b4d3c,
+  shrub: 0x3f4a34,
+  grassBlade: 0x566241,
+  grassTip: 0x9a9566,
+  smokeYoung: 0x3a3632,
+  smokeOld: 0xa9a7a2,
 
   // Machinery: weathered paint over steel.
   /** Painted panels: a tired off-white. */
@@ -59,8 +70,8 @@ export const PALETTE = {
   furnaceGlow: 0xff8a3a,
   /** Sun and fill light colours. */
   sun: 0xffe7c4,
-  fillSky: 0xb9c8d8,
-  fillGround: 0x7b7263,
+  fillSky: 0xb4c6dc,
+  fillGround: 0x6a6f5c,
 } as const;
 
 export type PaletteRole = keyof typeof PALETTE;

@@ -39,8 +39,9 @@ export interface BuildingModel {
   parts: Record<string, THREE.Object3D>;
   /** Furnace mouth glow (smelter). */
   glow: THREE.MeshStandardMaterial | null;
-  /** Where smoke leaves the stack, local. */
+  /** Where smoke leaves, local, and what sort. */
   smokeAt: THREE.Vector3 | null;
+  smokeKind?: 'stack' | 'exhaust';
 }
 
 /** Concrete slab with expansion joints and a hazard-striped front edge. */
@@ -120,6 +121,7 @@ function finish(
     parts: extra.parts ?? {},
     glow: extra.glow ?? null,
     smokeAt: extra.smokeAt ?? null,
+    smokeKind: extra.smokeKind,
   };
 }
 
@@ -324,7 +326,12 @@ function extractor(): BuildingModel {
   const outTrays: TraySpot[] = [{ x: 0.75, y: T, z: 1.4, w: 1.6, d: 1.05 }];
   trays(st, outTrays);
   const bulb = beacon(st, 0, top + 0.76, cz);
-  return finish('extractor', st, wb, bulb, { outTrays, parts: { piston } });
+  return finish('extractor', st, wb, bulb, {
+    outTrays,
+    parts: { piston },
+    smokeAt: new THREE.Vector3(ex + 0.45, T + 2.25, ez - 0.2),
+    smokeKind: 'exhaust',
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,34 +1,120 @@
-// The ground: one mesh from the heightfield, coloured per vertex, plus a flat
-// skirt out to the fog so the map edge is never a cliff into nothing.
+// The ground: one mesh from the heightfield plus a flat skirt out to the fog.
+//
+// Each vertex says what kind of ground it is (how grassy, how bare, how
+// rocky, and what ore runs through the rock); the shader turns that into
+// scrubby grass, dirt, cracked rock slabs and veins of ore. Steep ground is
+// rock regardless.
 
 import * as THREE from 'three';
-import { ITEM_IDS, type ItemId } from '../data/items';
 import { fbm, smoothstep } from '../sim/noise';
-import { Rng } from '../sim/rng';
-import { heightAt, type Terrain } from '../sim/terrain';
-import { ITEM_COLOURS, PALETTE } from './palette';
+import type { Terrain } from '../sim/terrain';
 import { NOISE_GLSL } from './kit';
-import { itemMaterial, makeItemGeometry } from './items';
+import { ITEM_COLOURS, PALETTE } from './palette';
 
-/** Ground texture without textures: blotches, grain and scattered small stones, in world space. */
-function gritty(mat: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+/** Ground cover at a point: 0–1 bare dirt, 0–1 exposed rock (deposits). */
+export function groundAt(t: Terrain, x: number, z: number): { dirt: number; rock: number; deposit: number } {
+  const seed = t.map.seed;
+  const patch = fbm(x, z, seed + 733, 26, 3);
+  let dirt = smoothstep(0.24, 0.5, patch);
+  let rock = 0;
+  let deposit = -1;
+  t.map.deposits.forEach((d, k) => {
+    const dd = Math.hypot(x - d.x, z - d.z);
+    if (dd > d.r * 1.3 + 3) return;
+    // A ragged outline, not a circle.
+    const edge = d.r * (0.95 + 0.3 * fbm(x, z, seed + 97 + k * 7, 7, 2));
+    const m = 1 - smoothstep(edge - 1.5, edge + 2.5, dd);
+    if (m > rock) {
+      rock = m;
+      deposit = k;
+    }
+  });
+  // The hub's surroundings are trodden bare.
+  const hd = Math.hypot(x - t.map.hub.x, z - t.map.hub.z);
+  dirt = Math.max(dirt, (1 - smoothstep(8, 15, hd)) * 0.85);
+  return { dirt, rock, deposit };
+}
+
+function gritty(mat: THREE.MeshStandardMaterial, perVertex: boolean): THREE.MeshStandardMaterial {
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uDirt = { value: new THREE.Color(PALETTE.dirt) };
+    shader.uniforms.uRock = { value: new THREE.Color(PALETTE.rock) };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldP;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <common>', `#include <common>
+varying vec3 vWorldP;
+varying vec3 vKind;
+varying vec3 vOre;
+${perVertex ? 'attribute vec2 kind;\nattribute vec3 ore;' : ''}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;
+${perVertex ? 'vKind = vec3(kind, normal.y);\nvOre = ore;' : 'vKind = vec3(0.0, 0.0, 1.0);\nvOre = vec3(0.0);'}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vWorldP;\n${NOISE_GLSL}`)
+      .replace('#include <common>', `#include <common>
+uniform vec3 uDirt;
+uniform vec3 uRock;
+varying vec3 vWorldP;
+varying vec3 vKind;
+varying vec3 vOre;
+${NOISE_GLSL}
+// Cellular pattern: distance to the nearest and second-nearest point, and an id for the nearest.
+vec3 kCells(vec2 x) {
+  vec2 n = floor(x);
+  vec2 f = fract(x);
+  float f1 = 8.0, f2 = 8.0, id = 0.0;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 g = vec2(float(i), float(j));
+      vec2 o = vec2(kHash(vec3(n + g, 1.0)), kHash(vec3(n + g, 2.0)));
+      vec2 r = g + o - f;
+      float d = dot(r, r);
+      if (d < f1) { f2 = f1; f1 = d; id = kHash(vec3(n + g, 5.0)); }
+      else if (d < f2) { f2 = d; }
+    }
+  }
+  return vec3(sqrt(f1), sqrt(f2), id);
+}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec3 p = vec3(vWorldP.x, 0.0, vWorldP.z);
-  float broad = kNoise(p * 0.07) * 0.6 + kNoise(p * 0.31) * 0.4;
-  float mid = kNoise(p * 1.9);
-  float grain = kNoise(p * 23.0);
-  diffuseColor.rgb *= (0.84 + 0.3 * broad) * (0.93 + 0.14 * mid) * (0.92 + 0.16 * grain);
-  float stones = smoothstep(0.8, 0.9, kNoise(p * 7.0 + 31.7));
-  diffuseColor.rgb *= 1.0 - 0.2 * stones;
-  float pale = smoothstep(0.84, 0.94, kNoise(p * 4.3 + 71.0));
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.2, pale * 0.4);
+  float broad = kNoise(p * 0.06) * 0.6 + kNoise(p * 0.27) * 0.4;
+  float mid = kNoise(p * 1.7);
+  float grain = kNoise(p * 21.0);
+  float fine = kNoise(p * 7.0 + 31.7);
+
+  // Scrubby grass: mottled, with dry clumps.
+  vec3 grass = diffuseColor.rgb * (0.8 + 0.4 * broad) * (0.86 + 0.28 * mid) * (0.85 + 0.3 * grain);
+  grass = mix(grass, grass * vec3(1.35, 1.25, 0.9), smoothstep(0.62, 0.8, fine) * 0.5);
+
+  // Bare dirt, with a ragged edge and a scatter of small stones.
+  float dirtM = smoothstep(0.3, 0.75, vKind.y + (mid - 0.5) * 0.6 + (fine - 0.5) * 0.3 + (grain - 0.5) * 0.3);
+  vec3 dirt = uDirt * (0.84 + 0.3 * broad) * (0.9 + 0.2 * mid) * (0.9 + 0.2 * grain);
+  dirt *= 1.0 - 0.22 * smoothstep(0.8, 0.9, fine);
+  vec3 col = mix(grass, dirt, dirtM);
+
+  // Rock: on steep ground, and where a deposit breaks the surface.
+  float steep = smoothstep(0.9, 0.74, vKind.z);
+  float outcrop = smoothstep(0.3, 0.62, vKind.x + (mid - 0.5) * 0.45);
+  float rockM = max(steep, outcrop);
+  // Irregular slabs: cells of a cellular pattern, each its own tone.
+  vec3 cell = kCells(p.xz * 0.62 + vec2(kNoise(p * 0.4), kNoise(p * 0.4 + 17.0)) * 0.7);
+  float edge = cell.y - cell.x;
+  vec3 rock = uRock * (0.7 + 0.45 * cell.z) * (0.86 + 0.28 * grain) * (0.92 + 0.16 * mid);
+  // Strata across cliff faces.
+  float strata = kNoise(vec3(vWorldP.y * 2.4, p.x * 0.06, p.z * 0.06));
+  rock = mix(rock, rock * (0.62 + 0.62 * strata), steep);
+  // Joints between slabs. On a deposit they are wide and packed with ore;
+  // elsewhere they are thin dark cracks.
+  float lode = smoothstep(0.25, 0.6, vKind.x);
+  float w = mix(0.045, 0.06 + 0.22 * kNoise(p * 0.45 + 40.0), lode);
+  float joint = 1.0 - smoothstep(w * 0.55, w, edge);
+  rock *= 0.72 + 0.28 * smoothstep(w, w + 0.14, edge);
+  vec3 gravel = mix(vOre, uRock, 0.3) * (0.42 + 0.34 * grain) * (0.75 + 0.35 * fine);
+  vec3 fill = mix(uRock * 0.3, gravel, lode);
+  rock = mix(rock, fill, joint);
+  // A few slabs are ore right through.
+  rock = mix(rock, gravel * 1.05, lode * step(0.84, cell.z) * (1.0 - joint) * 0.75);
+  col = mix(col, rock, rockM);
+  diffuseColor.rgb = col;
 }`);
   };
   return mat;
@@ -39,11 +125,11 @@ export function createTerrainMesh(t: Terrain): THREE.Group {
   const n = t.n;
   const pos = new Float32Array(n * n * 3);
   const col = new Float32Array(n * n * 3);
-  const ground = new THREE.Color(PALETTE.ground);
+  const kind = new Float32Array(n * n * 2);
+  const ore = new Float32Array(n * n * 3);
+  const grass = new THREE.Color(PALETTE.ground);
   const cool = new THREE.Color(PALETTE.groundCool);
   const dry = new THREE.Color(PALETTE.groundDry);
-  const cliff = new THREE.Color(PALETTE.cliff);
-  const cliffDark = new THREE.Color(PALETTE.cliffShadow);
   const tmp = new THREE.Color();
   const depCols = t.map.deposits.map((d) => new THREE.Color(ITEM_COLOURS[d.item]));
   const seed = t.map.seed;
@@ -51,37 +137,26 @@ export function createTerrainMesh(t: Terrain): THREE.Group {
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const k = j * n + i;
-      const h = t.heights[k];
       pos[k * 3] = i;
-      pos[k * 3 + 1] = h;
+      pos[k * 3 + 1] = t.heights[k];
       pos[k * 3 + 2] = j;
-      // Local slope from neighbouring samples.
-      const hx = t.heights[j * n + Math.min(n - 1, i + 1)] - t.heights[j * n + Math.max(0, i - 1)];
-      const hz = t.heights[Math.min(n - 1, j + 1) * n + i] - t.heights[Math.max(0, j - 1) * n + i];
-      const slope = Math.hypot(hx, hz) * 0.5;
-      // Ground variation: a broad cool/dry drift and some small patches.
+      // A broad drift between cooler and drier grass.
       const v = fbm(i, j, seed + 501, 60, 3);
-      const p = fbm(i, j, seed + 733, 12, 2);
-      tmp.copy(ground);
-      if (v < 0) tmp.lerp(cool, Math.min(1, -v * 1.6));
-      else tmp.lerp(dry, Math.min(1, v * 1.3) * 0.7);
-      tmp.lerp(dry, smoothstep(0.2, 0.7, p) * 0.25);
-      const rockiness = smoothstep(0.5, 1.1, slope);
-      if (rockiness > 0) {
-        const rc = cliff.clone().lerp(cliffDark, smoothstep(1.4, 2.6, slope) * 0.6);
-        tmp.lerp(rc, rockiness);
-      }
-      // Deposits tint the ground beneath them, with a soft edge.
-      t.map.deposits.forEach((d, di) => {
-        const dd = Math.hypot(i - d.x, j - d.z);
-        if (dd < d.r + 3) {
-          const w = (1 - smoothstep(d.r * 0.5, d.r + 3, dd)) * 0.45;
-          tmp.lerp(depCols[di], w);
-        }
-      });
+      tmp.copy(grass);
+      if (v < 0) tmp.lerp(cool, Math.min(1, -v * 1.8));
+      else tmp.lerp(dry, Math.min(1, v * 1.5));
       col[k * 3] = tmp.r;
       col[k * 3 + 1] = tmp.g;
       col[k * 3 + 2] = tmp.b;
+      const g = groundAt(t, i, j);
+      kind[k * 2] = g.rock;
+      kind[k * 2 + 1] = g.dirt;
+      if (g.deposit >= 0) {
+        const c = depCols[g.deposit];
+        ore[k * 3] = c.r;
+        ore[k * 3 + 1] = c.g;
+        ore[k * 3 + 2] = c.b;
+      }
     }
   }
   const idx = new Uint32Array((n - 1) * (n - 1) * 6);
@@ -99,16 +174,18 @@ export function createTerrainMesh(t: Terrain): THREE.Group {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('kind', new THREE.BufferAttribute(kind, 2));
+  geo.setAttribute('ore', new THREE.BufferAttribute(ore, 3));
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   geo.computeVertexNormals();
-  const mat = gritty(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
+  const mat = gritty(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }), true);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'terrain';
   group.add(mesh);
 
   // Skirt: four flat slabs around the map, at the level the edge settles to.
-  const skirtMat = gritty(new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 0.95 }));
+  const skirtMat = gritty(new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 0.95 }), false);
   const S = t.size;
   const F = 2000;
   for (const [x0, z0, x1, z1] of [
@@ -124,43 +201,5 @@ export function createTerrainMesh(t: Terrain): THREE.Group {
     m.receiveShadow = true;
     group.add(m);
   }
-
-  group.add(createDepositScatter(t));
   return group;
-}
-
-/** Loose chunks of the raw item lying on each deposit. */
-function createDepositScatter(t: Terrain): THREE.Group {
-  const g = new THREE.Group();
-  const rng = new Rng(t.map.seed ^ 0x9e3779b9);
-  const byItem = new Map<ItemId, THREE.Matrix4[]>();
-  const m = new THREE.Matrix4();
-  const qt = new THREE.Quaternion();
-  const e = new THREE.Euler();
-  for (const d of t.map.deposits) {
-    const count = Math.round(d.r * d.r * 2.6);
-    const list = byItem.get(d.item) ?? [];
-    for (let i = 0; i < count; i++) {
-      const a = rng.next() * Math.PI * 2;
-      const rr = Math.sqrt(rng.next()) * d.r;
-      const x = d.x + Math.cos(a) * rr;
-      const z = d.z + Math.sin(a) * rr;
-      const s = rng.range(1.4, 3.2) * (1 - (rr / d.r) * 0.5);
-      e.set(rng.next() * 6, rng.next() * 6, rng.next() * 6);
-      qt.setFromEuler(e);
-      m.compose(new THREE.Vector3(x, heightAt(t, x, z) - 0.06 * s, z), qt, new THREE.Vector3(s, s * 0.8, s));
-      list.push(m.clone());
-    }
-    byItem.set(d.item, list);
-  }
-  for (const item of ITEM_IDS) {
-    const list = byItem.get(item);
-    if (!list) continue;
-    const im = new THREE.InstancedMesh(makeItemGeometry(item), itemMaterial(item), list.length);
-    list.forEach((mm, i) => im.setMatrixAt(i, mm));
-    im.castShadow = true;
-    im.receiveShadow = true;
-    g.add(im);
-  }
-  return g;
 }

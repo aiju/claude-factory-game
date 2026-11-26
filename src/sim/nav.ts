@@ -2,9 +2,9 @@
 // adds cost. A* with string-pulling gives straight-line paths.
 
 import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
-import { NAV } from '../data/tunables';
+import { NAV, SCENERY } from '../data/tunables';
 import { aabb, inflate, toLocal, type OBB } from './geom';
-import { bodyOBB, buildingBody, dockPoint, lowerName } from './build';
+import { bodyOBB, buildingBody, buildingDock, dockPoint, lowerName } from './build';
 import { cellSlope } from './terrain';
 import type { Building } from './types';
 import type { Sim } from './world';
@@ -37,7 +37,49 @@ export function createNav(sim: Sim): NavGrid {
       cost[k] = 1 + s * NAV.slopeCost;
     }
   }
-  return { size: n, fixed, occ: new Uint16Array(n * n), cost, comp: new Int32Array(n * n), compDirty: true, version: 0 };
+  const nav: NavGrid = { size: n, fixed, occ: new Uint16Array(n * n), cost, comp: new Int32Array(n * n), compDirty: true, version: 0 };
+  const gone = new Set(sim.state.cleared);
+  t.scenery.forEach((s, k) => {
+    if (!gone.has(k)) stampDisc(nav, s.x, s.z, s.r, 1);
+  });
+  return nav;
+}
+
+/** Block (or free) the cells whose centres lie within a disc. */
+function stampDisc(nav: NavGrid, x: number, z: number, r: number, delta: number) {
+  const n = nav.size;
+  const rr = r + 0.3;
+  let any = false;
+  for (let j = Math.max(0, Math.floor(z - rr)); j <= Math.min(n - 1, Math.floor(z + rr)); j++) {
+    for (let i = Math.max(0, Math.floor(x - rr)); i <= Math.min(n - 1, Math.floor(x + rr)); i++) {
+      if (Math.hypot(i + 0.5 - x, j + 0.5 - z) <= rr) {
+        nav.occ[j * n + i] += delta;
+        any = true;
+      }
+    }
+  }
+  // Always block at least the cell the thing stands in.
+  if (!any) nav.occ[Math.floor(z) * n + Math.floor(x)] += delta;
+  nav.compDirty = true;
+  nav.version++;
+}
+
+/** Remove trees and boulders under and around a new building. */
+export function clearScenery(sim: Sim, b: Building) {
+  const body = inflate(buildingBody(b), SCENERY.buildMargin);
+  const dock = buildingDock(b);
+  const inside = (o: OBB, x: number, z: number, pad: number) => {
+    const [lx, lz] = toLocal(o.cx, o.cz, o.rot, x, z);
+    return Math.abs(lx) <= o.hx + pad && Math.abs(lz) <= o.hz + pad;
+  };
+  const gone = new Set(sim.state.cleared);
+  sim.d.terrain.scenery.forEach((s, k) => {
+    if (gone.has(k)) return;
+    if (inside(body, s.x, s.z, s.r) || (dock && inside(dock, s.x, s.z, s.r + 0.5))) {
+      sim.state.cleared.push(k);
+      stampDisc(sim.d.nav, s.x, s.z, s.r, -1);
+    }
+  });
 }
 
 function rasterise(nav: NavGrid, o: OBB, delta: number) {

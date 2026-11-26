@@ -5,7 +5,7 @@ import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
 import type { RecipeId } from '../data/recipes';
 import { indexAdd, indexRemove, validatePlacement } from './build';
 import { addHaulers, cancelJobsFor, repathBlocked } from './haul';
-import { navAddBuilding, navRemoveBuilding } from './nav';
+import { clearScenery, navAddBuilding, navRemoveBuilding } from './nav';
 import { applyRecipe, pruneOutputs } from './prod';
 import type { Building } from './types';
 import type { Sim } from './world';
@@ -46,6 +46,7 @@ export function addBuilding(sim: Sim, b: Building) {
   sim.state.buildings.push(b);
   sim.d.byId.set(b.id, b);
   indexAdd(sim.d.index, b);
+  clearScenery(sim, b);
   navAddBuilding(sim, b);
 }
 

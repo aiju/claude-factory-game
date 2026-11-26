@@ -13,7 +13,7 @@ import { createTerrain, heightAt, type Terrain } from './terrain';
 import type { Building, Hauler, Job } from './types';
 import { ITEM_IDS } from '../data/items';
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 export interface WorldState {
   version: number;
@@ -25,6 +25,8 @@ export interface WorldState {
   buildings: Building[];
   haulers: Hauler[];
   jobs: Job[];
+  /** Indices into terrain.scenery that building has removed. */
+  cleared: number[];
 }
 
 /** Everything that is not saved: rebuilt from state + map. */
@@ -46,7 +48,7 @@ export interface Sim {
 }
 
 function emptyState(): WorldState {
-  return { version: STATE_VERSION, tick: 0, rng: SIM.seed, nextId: 1, hub: 0, buildings: [], haulers: [], jobs: [] };
+  return { version: STATE_VERSION, tick: 0, rng: SIM.seed, nextId: 1, hub: 0, buildings: [], haulers: [], jobs: [], cleared: [] };
 }
 
 function buildDerived(sim: Sim) {

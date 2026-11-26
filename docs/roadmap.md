@@ -68,11 +68,13 @@ above", roofs, ground paint, terrain, hauler shape and eyes): re-read
    only when its tray is full or nothing consumes the item). Report how the
    M2 chain's trip mix and parts-per-10-minutes change.
 
-**Progress:** items 1–4 have had a first pass by the design lead, directly in
-`src/render/` (lighting, hauler model with static eyes, all four building
-models, pad instead of plinth, quiet dock paint, a `showroom` scenario and
-`show-*` screenshots). Still open: eye expressions (2), nav radius and
-parking spacing to match the larger hauler (2), cliffs (5), hub tidying (6).
+**Progress:** the look has been redone by the design lead directly in
+`src/render/` (see `visual-style.md`, rewritten): weathered industrial kit,
+rover haulers with static eyes, all four buildings, lighting, vegetated
+ground, rocky deposits, trees and boulders (solid in the sim, cleared by
+building), particle smoke, a `showroom` scenario and `show-*` screenshots.
+Still open: eye expressions (2), nav radius and parking spacing to match the
+larger hauler (2), hub tidying (6), ambient occlusion.
 
 Answers to the other M2 questions: keep six starting haulers and do not tune
 pressure until roads exist (M3 changes the numbers); pivot-and-reverse

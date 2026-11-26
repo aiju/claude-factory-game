@@ -13,6 +13,8 @@ import { kitMaterial } from './kit';
 import { HaulerView } from './haulers';
 import { buildModel, type BuildingModel, type TraySpot } from './models';
 import { PALETTE } from './palette';
+import { SceneryView } from './scenery';
+import { SMOKE, SmokeView } from './smoke';
 
 interface BView {
   id: number;
@@ -21,7 +23,6 @@ interface BView {
   glow: number;
   dishSpeed: number;
   smokeClock: number;
-  puffs: number[];
 }
 
 const tmpM = new THREE.Matrix4();
@@ -72,7 +73,8 @@ export class WorldView {
   private views = new Map<number, BView>();
   private templates = new Map<string, BuildingModel>();
   private items = new Map<ItemId, Instancer>();
-  private smoke: Instancer;
+  private smoke = new SmokeView();
+  readonly scenery: SceneryView;
   readonly haulers: HaulerView;
   private time = 0;
   /** Building id under selection, for a highlight. */
@@ -83,8 +85,9 @@ export class WorldView {
 
   constructor(private sim: Sim) {
     for (const item of ITEM_IDS) this.items.set(item, new Instancer(makeItemGeometry(item), itemMaterial(item), this.group, 256));
-    const puffMat = new THREE.MeshStandardMaterial({ color: PALETTE.hullDark, roughness: 1, transparent: true, opacity: 0.5, depthWrite: false });
-    this.smoke = new Instancer(new THREE.IcosahedronGeometry(0.5, 1), puffMat, this.group, 64, false);
+    this.group.add(this.smoke.mesh);
+    this.scenery = new SceneryView(sim);
+    this.group.add(this.scenery.group);
     this.haulers = new HaulerView(sim, this.group);
   }
 
@@ -93,6 +96,8 @@ export class WorldView {
     this.views.clear();
     this.sim = sim;
     this.haulers.setSim(sim);
+    this.scenery.setSim(sim);
+    this.smoke.clear();
   }
 
   pickableMeshes(): THREE.Object3D[] {
@@ -114,7 +119,7 @@ export class WorldView {
     this.group.add(model.root);
     const dock = buildDockMesh(this.sim.d.terrain, b.type, b.x, b.z, b.rot);
     if (dock) this.group.add(dock);
-    const v: BView = { id: b.id, model, dock, glow: 0, dishSpeed: 0, smokeClock: 0, puffs: [] };
+    const v: BView = { id: b.id, model, dock, glow: 0, dishSpeed: 0, smokeClock: 0 };
     this.views.set(b.id, v);
     return v;
   }
@@ -133,7 +138,7 @@ export class WorldView {
     const sim = this.sim;
     const seen = new Set<number>();
     for (const it of this.items.values()) it.begin();
-    this.smoke.begin();
+    this.scenery.update();
     const busy = sim.state.jobs.length > 0;
     for (const b of sim.state.buildings) {
       seen.add(b.id);
@@ -149,7 +154,7 @@ export class WorldView {
     }
     this.haulers.update(alpha, dt, this);
     for (const it of this.items.values()) it.end();
-    this.smoke.end();
+    this.smoke.update(dt);
     this.updateOutline();
   }
 
@@ -226,28 +231,14 @@ export class WorldView {
       v.glow += (target - v.glow) * Math.min(1, dt * 2.5);
       m.glow.emissiveIntensity = v.glow * (0.92 + 0.08 * Math.sin(t * 7.3) * Math.sin(t * 3.1));
     }
-    if (m.smokeAt) {
-      if (b.status === 'working') {
-        v.smokeClock += dt;
-        if (v.smokeClock > 1.1) {
-          v.smokeClock = 0;
-          v.puffs.push(t);
-        }
-      }
-      const life = 4;
-      v.puffs = v.puffs.filter((t0) => t - t0 < life);
-      for (const t0 of v.puffs) {
-        const a = (t - t0) / life;
-        tmpV.copy(m.smokeAt);
-        tmpV.y += 3.2 * Math.pow(a, 0.75);
-        tmpV.x += a * 1.2;
-        tmpV.z -= a * 0.6;
-        tmpV.applyMatrix4(m.root.matrixWorld);
-        const s = (0.35 + 0.9 * Math.sqrt(a)) * (a > 0.75 ? 1 - (a - 0.75) / 0.25 : 1);
-        tmpS.set(s, s, s);
-        tmpQ.identity();
-        tmpM.compose(tmpV, tmpQ, tmpS);
-        this.smoke.add(tmpM);
+    if (m.smokeAt && b.status === 'working') {
+      const kind = m.smokeKind === 'exhaust' ? SMOKE.exhaust : SMOKE.stack;
+      const every = m.smokeKind === 'exhaust' ? 0.2 : 0.1;
+      v.smokeClock += dt;
+      while (v.smokeClock > every) {
+        v.smokeClock -= every;
+        tmpV.copy(m.smokeAt).applyMatrix4(m.root.matrixWorld);
+        this.smoke.emit(tmpV, kind);
       }
     }
   }

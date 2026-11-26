@@ -36,6 +36,9 @@ goods); until then it is a sandbox for exploring the systems.
   block them, buildings need roughly flat ground). It is not the core puzzle.
 - Deposits of **ore**, **rock** and **coal** are scattered so that no single
   spot has everything.
+- Forest patches and scattered boulders are solid: haulers path around them.
+  Placing a building clears whatever stands on its site, so trees shape
+  early routes but never block construction.
 
 ## Buildings
 
