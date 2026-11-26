@@ -49,5 +49,18 @@ If you are implementing:
 
 ## Commands
 
-To be filled in by the implementer at M0 (`npm run dev`, `test`, `build`, and
-the screenshot script if there is one).
+```bash
+npm install          # once
+npm run dev          # dev server at http://localhost:5173
+npm test             # headless sim tests (Vitest)
+npm run typecheck    # tsc, no emit
+npm run build        # typecheck + production build into dist/
+npm run shots        # screenshots into shots/ (all, or name some: npm run shots -- hub)
+```
+
+The screenshot script starts its own dev server on port 5199 and drives a
+headless Chromium (Playwright, not a project dependency: it uses the globally
+installed one). Shots are listed at the top of `scripts/shots.mjs`; a shot can
+name a debug scenario (`?scenario=` in `src/debug/scenarios.ts`) and a number
+of ticks to run first. URL parameters for the dev server: `cam=x,z,dist,yawDeg,pitchDeg`,
+`scenario=name`, `noedge` (no edge-scroll), `paused`.

@@ -8,7 +8,7 @@ Until M6, building is free and instant, and a debug button adds haulers.
 ---
 
 ## M0 — A place to stand
-**Status:** not started
+**Status:** done
 
 Toolchain, frame loop with fixed-tick sim, the fixed map's terrain with
 deposits marked, RTS camera, lighting and fog per the style guide.
