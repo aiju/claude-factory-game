@@ -4,7 +4,7 @@
 import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
 import { NAV, PARKING, SCENERY } from '../data/tunables';
 import { aabb, inflate, toLocal, toWorld, type OBB } from './geom';
-import { bodyOBB, buildingBody, buildingDock, dockPoint, lowerName } from './build';
+import { bodyOBB, buildingBody, buildingDock, dockPoint, lowerName, queryIndex } from './build';
 import { cellTravelCost, MIN_TRAVEL_COST, type Ground } from './ground';
 import { cellSlope } from './terrain';
 import type { Building } from './types';
@@ -14,6 +14,8 @@ export interface NavGrid {
   size: number;
   /** Cliffs and the map edge. */
   fixed: Uint8Array;
+  /** Cells whose centre is inside a tree or boulder (not inflated): solid to a hauler's centre. */
+  scen: Uint8Array;
   /** Number of footprints covering each cell. */
   occ: Uint16Array;
   /** Cost multiplier per cell, ≥ 1. */
@@ -38,7 +40,7 @@ export function createNav(sim: Sim): NavGrid {
       cost[k] = 1 + s * NAV.slopeCost;
     }
   }
-  const nav: NavGrid = { size: n, fixed, occ: new Uint16Array(n * n), cost, comp: new Int32Array(n * n), compDirty: true, version: 0 };
+  const nav: NavGrid = { size: n, fixed, scen: new Uint8Array(n * n), occ: new Uint16Array(n * n), cost, comp: new Int32Array(n * n), compDirty: true, version: 0 };
   const gone = new Set(sim.state.cleared);
   t.scenery.forEach((s, k) => {
     if (!gone.has(k)) stampDisc(nav, s.x, s.z, s.r, 1);
@@ -61,6 +63,13 @@ function stampDisc(nav: NavGrid, x: number, z: number, r: number, delta: number)
   }
   // Always block at least the cell the thing stands in.
   if (!any) nav.occ[Math.floor(z) * n + Math.floor(x)] += delta;
+  // The trunk or rock itself, for collisions.
+  const sc = nav.scen;
+  for (let j = Math.max(0, Math.floor(z - r)); j <= Math.min(n - 1, Math.floor(z + r)); j++) {
+    for (let i = Math.max(0, Math.floor(x - r)); i <= Math.min(n - 1, Math.floor(x + r)); i++) {
+      if (Math.hypot(i + 0.5 - x, j + 0.5 - z) <= Math.max(r, 0.5)) sc[j * n + i] += delta;
+    }
+  }
   nav.compDirty = true;
   nav.version++;
 }
@@ -140,6 +149,62 @@ export function blocked(nav: NavGrid, i: number, j: number): boolean {
   if (i < 0 || j < 0 || i >= nav.size || j >= nav.size) return true;
   const k = j * nav.size + i;
   return nav.fixed[k] !== 0 || nav.occ[k] !== 0;
+}
+
+/**
+ * Solid to a hauler's centre: inside a building's footprint plus `pad`, a tree
+ * or boulder, a cliff, or off the map. Unlike the nav grid this is not
+ * inflated for path clearance; it is what a hauler physically cannot enter.
+ */
+export function solidAt(sim: Sim, x: number, z: number, pad = NAV.solidPad): boolean {
+  const nav = sim.d.nav;
+  const i = Math.floor(x);
+  const j = Math.floor(z);
+  if (i < 0 || j < 0 || i >= nav.size || j >= nav.size) return true;
+  const k = j * nav.size + i;
+  if (nav.fixed[k] || nav.scen[k]) return true;
+  // Footprints are rasterised inflated by more than `pad`, so if no cell
+  // around here is occupied there is no building near.
+  let near = false;
+  for (let dj = -1; dj <= 1 && !near; dj++) {
+    for (let di = -1; di <= 1; di++) {
+      const ii = i + di;
+      const jj = j + dj;
+      if (ii >= 0 && jj >= 0 && ii < nav.size && jj < nav.size && nav.occ[jj * nav.size + ii]) {
+        near = true;
+        break;
+      }
+    }
+  }
+  if (!near) return false;
+  const probe: OBB = { cx: x, cz: z, hx: 0.01, hz: 0.01, rot: 0 };
+  for (const id of queryIndex(sim.d.index, probe)) {
+    const b = sim.d.byId.get(id)!;
+    const o = inflate(buildingBody(b), pad);
+    const [lx, lz] = toLocal(o.cx, o.cz, o.rot, x, z);
+    if (Math.abs(lx) < o.hx && Math.abs(lz) < o.hz) return true;
+  }
+  return false;
+}
+
+/**
+ * If (x, z) is inside a building's footprint plus `pad`, the nearest point on
+ * that margin's edge (so a hauler slides along the wall); otherwise (x, z).
+ */
+export function pushOutOfBuildings(sim: Sim, x: number, z: number, pad = NAV.solidPad): [number, number] {
+  const probe: OBB = { cx: x, cz: z, hx: 0.01, hz: 0.01, rot: 0 };
+  for (const id of queryIndex(sim.d.index, probe)) {
+    const b = sim.d.byId.get(id)!;
+    const o = inflate(buildingBody(b), pad);
+    const [lx, lz] = toLocal(o.cx, o.cz, o.rot, x, z);
+    if (Math.abs(lx) >= o.hx || Math.abs(lz) >= o.hz) continue;
+    let ox = lx;
+    let oz = lz;
+    if (o.hx - Math.abs(lx) < o.hz - Math.abs(lz)) ox = Math.sign(lx || 1) * (o.hx + 1e-3);
+    else oz = Math.sign(lz || 1) * (o.hz + 1e-3);
+    return toWorld(o.cx, o.cz, o.rot, ox, oz);
+  }
+  return [x, z];
 }
 
 export function blockedAt(nav: NavGrid, x: number, z: number): boolean {

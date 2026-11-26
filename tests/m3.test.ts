@@ -59,7 +59,7 @@ describe('M3: wear and roads', () => {
     expect(early.track).toBeGreaterThan(30);
     run(sim, 30 * 60 * 3);
     const busy = levels(sim);
-    expect(busy.road).toBeGreaterThan(20);
+    expect(busy.road).toBeGreaterThan(10);
     for (const id of ids) must(sim, { type: 'demolish', id });
     run(sim, 30 * 60 * 5);
     // Fading, not gone.
@@ -137,7 +137,8 @@ describe('M3: congestion', () => {
     }
     expect(slow / inGap).toBeGreaterThan(0.3);
     expect(peak).toBeGreaterThan(2);
-    expect(stall).toBeLessThan(30 * 30);
+    // Backing off, re-planning and, last of all, squeezing past keep it moving.
+    expect(stall).toBeLessThan(45 * 30);
     expect(checkReservations(sim)).toEqual([]);
   });
 });

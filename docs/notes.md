@@ -8,9 +8,17 @@ line or two.
 Decisions taken where the docs were silent, departures from anything marked
 *suggested*, and tunables changed from the design doc's starting values.
 
+- **Haulers are solid** (Emily: "they drive through buildings and other haulers sometimes"):
+  - Buildings, trees and cliffs: a hauler's centre never enters a footprint plus 0.6 m. A step that would is pushed back to the edge, so it slides along the wall.
+  - Other haulers: a step that would bring two outlines (1.8 × 1.2 m) into contact is refused. Collisions are checked against where the other is and where it is heading this tick, and also when turning on the spot.
+  - When stuck behind another hauler, it backs off: after 1 s if the other is standing still, after 3 s if both are moving and it is the higher-numbered one.
+  - The guarantee against deadlock is headway along the path. With none for 12 s it backs right off and plans again, or turns on the spot if it was circling. After 24 s, and only if other haulers are what holds it, it squeezes past (drives through) for 2.5 s, and stays ghosted until clear. Waiting in a dock queue (within 9 m of the spot) doesn't count.
+  - Results: no hauler inside a building, and no touching outside a squeeze, in either test scenario. Squeezes are about 2.5 per hauler per 10 minutes on the M2 chain (about 1% of hauler time), and about 4.5 in the 30-hauler gap jam. Worst wait: about 45 s.
+  - Building docks have two lanes 1.8 m apart. While one is being worked, the next hauler for it waits 3 m back so the first can back out.
+  - **Cost**: the six-hauler M2 chain now makes about 100 parts in 30 minutes, against about 180 when haulers could pass through each other. More haulers make it slower, not faster (12: about 97; 20: about 82), because the docks become the bottleneck. Road thresholds were lowered (track 8, road 26) so a busy route still paves within about 3 minutes at the lower traffic. (M2.5)
 - **Heads turn** (`src/render/head.ts`, numbers in `HEAD`). The head is its own mesh on the neck, and eyes and visor turn with it.
   - It looks into bends before the body turns (up to 40°), and at the building when within 4 m of its dock or while loading.
-  - It swivels 180° to face where it is going on a long reverse: at least 3 m of a parking leg left, or more than 1.2 s of reversing. It faces forward again once driving forward or parked. Never more than one turn round per 2 s.
+  - It swivels 180° to face where it is going on a long reverse: at least 3 m of a parking leg left, or more than 2 s of reversing. It faces forward again once driving forward or parked. Never more than one turn round per 2 s.
   - On the busy M2 chain that is about one turn round per hauler every two minutes; short shunts don't trigger it. (M2.5)
 - **Haulers drive like wheeled vehicles** (`drive()` in `src/sim/haul.ts`, numbers in `HAULER`), at Emily's request:
   - Heading changes only while moving, never tighter than a 1.8 m turning radius. Paths are followed by pure pursuit (lookahead 1.4 m plus 0.35 s of travel).
@@ -65,6 +73,7 @@ Decisions taken where the docs were silent, departures from anything marked
 Taste-heavy or foundational questions. State the provisional choice you went
 with so work is not blocked.
 
+- **Docks are now the bottleneck**, and adding haulers makes it worse. That is arguably the game working: a busy dock is what links are for (M4). But the cheapest improvement would be docking the way trucks do: reversing onto the dock, so they leave forwards without a three-point turn in front of the queue. (M2.5)
 - **Docks and turning**: haulers arrive at a dock facing the building and mostly have to back out. Real yards have trucks reverse onto the dock instead, which would read well and save a shunt on the way out. Worth doing? (M2.5)
 - **Is the road too loud?** Packed gravel in the palette's `road` grey is the darkest large area on screen once a route is busy (see `m3-roads`). A lighter, browner road would sit back more. (M3)
 - **How fast should roads fade?** Currently about 9 minutes from road to track, and about 16 to grass, after a route is abandoned. Faster would make rerouting feel more responsive; slower makes the ground feel more historical. (M3)

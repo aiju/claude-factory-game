@@ -90,7 +90,8 @@ describe('M2: haulers', () => {
     expect(sim.state.jobs.length).toBeGreaterThan(0);
     for (const id of Object.values(ids)) must(sim, { type: 'demolish', id });
     expectClean(sim);
-    run(sim, 30 * 60);
+    // Time to deliver what they carry to the hub, then park one by one.
+    run(sim, 30 * 120);
     expect(sim.state.jobs).toEqual([]);
     expect(sim.state.haulers.every((h) => h.mode === 'idle' && h.cargo === null)).toBe(true);
     expectClean(sim);

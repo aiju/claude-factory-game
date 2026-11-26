@@ -7,9 +7,9 @@ import { RECIPES } from '../data/recipes';
 import { AVOID, DISPATCH, HAULER, PARKING, TICK_RATE, DT } from '../data/tunables';
 import { dockLanes, dockPoint } from './build';
 import type { CommandResult } from './commands';
-import { angleDiff, toWorld } from './geom';
+import { angleDiff, obbOverlap, toWorld, type OBB } from './geom';
 import { addWear, crowdFactor, groundSpeed } from './ground';
-import { blockedAt, findPath, lineClear } from './nav';
+import { blockedAt, findPath, lineClear, pushOutOfBuildings, solidAt } from './nav';
 import { pruneOutputs } from './prod';
 import { heightAt } from './terrain';
 import type { Building, Hauler, Job, Slot } from './types';
@@ -77,6 +77,8 @@ export function addHaulers(sim: Sim, n: number): CommandResult {
       odo: 0,
       wait: 0,
       squeeze: 0,
+      best: Infinity,
+      bestT: 0,
     });
   }
   return { ok: true };
@@ -113,6 +115,7 @@ function setPath(sim: Sim, h: Hauler, tx: number, tz: number): boolean {
   h.revFrom = -1;
   h.man = 'drive';
   h.manT = 0;
+  h.best = Infinity;
   if (!p) {
     h.path = [];
     return false;
@@ -219,6 +222,7 @@ function setParkPath(sim: Sim, h: Hauler, bay: { x: number; z: number; heading: 
     h.pathI = 1;
     h.man = 'drive';
     h.manT = 0;
+    h.best = Infinity;
     return true;
   }
   return false;
@@ -470,6 +474,35 @@ export function remaining(h: Hauler): number {
   return d;
 }
 
+/** Plan the route to wherever the hauler is going again, keeping its progress clock. */
+function replan(sim: Sim, h: Hauler) {
+  const best = h.best;
+  const bestT = h.bestT;
+  const job = jobById(sim, h.job);
+  if (h.mode === 'home') goHome(sim, h);
+  else if (job && (h.mode === 'pickup' || h.mode === 'drop')) {
+    const b = sim.d.byId.get(h.mode === 'pickup' ? job.from : job.to);
+    if (b) routeToDock(sim, h, b);
+  }
+  h.best = best;
+  h.bestT = bestT;
+}
+
+/** Remaining length of the whole path, all legs, from the hauler's position. */
+function pathRemaining(h: Hauler): number {
+  let d = 0;
+  let px = h.x;
+  let pz = h.z;
+  for (let k = Math.max(1, h.pathI); k < h.path.length / 2; k++) {
+    const x = h.path[k * 2];
+    const z = h.path[k * 2 + 1];
+    d += Math.hypot(x - px, z - pz);
+    px = x;
+    pz = z;
+  }
+  return d;
+}
+
 /**
  * Pure-pursuit target: the nearest point on the segment being followed, then
  * `L` metres further along the path (clamped to the end of the leg).
@@ -595,7 +628,7 @@ function* near(tr: Traffic, x: number, z: number, r: number): Generator<Seen> {
  * yielding) and a steering offset (keep right, pass a stopped bot). Positive
  * steer turns left.
  */
-function avoidance(h: Hauler, tr: Traffic, fx: number, fz: number, endX: number, endZ: number, parking: boolean): { cap: number; steer: number; heldBy: number } {
+function avoidance(h: Hauler, tr: Traffic, fx: number, fz: number, endX: number, endZ: number, parking: boolean): { cap: number; steer: number; heldBy: number; queued: boolean } {
   const R = AVOID.radius;
   const look = AVOID.look + h.speed * AVOID.lookPerSpeed;
   // Right-hand side of the direction of travel.
@@ -604,6 +637,8 @@ function avoidance(h: Hauler, tr: Traffic, fx: number, fz: number, endX: number,
   let cap = Infinity;
   let steer = 0;
   let heldBy = -1;
+  /** The tightest limit comes from waiting in line for a dock spot. */
+  let queued = false;
   const impatient = h.squeeze > 0;
   const limit = (v: number, o: Seen, patient = false) => {
     // Deadlock breaker: a bot that has made no progress for a while squeezes
@@ -613,6 +648,7 @@ function avoidance(h: Hauler, tr: Traffic, fx: number, fz: number, endX: number,
     if (v < cap) {
       cap = v;
       heldBy = o.id;
+      queued = patient;
     }
   };
   for (const o of near(tr, h.x, h.z, look + 2 * R)) {
@@ -623,12 +659,18 @@ function avoidance(h: Hauler, tr: Traffic, fx: number, fz: number, endX: number,
     const dz = o.z - h.z;
     // Bound for the same spot (one dock lane): whoever is nearer goes first,
     // the other holds back. A bot already working there is nearest.
-    if (!o.parked && (Math.hypot(o.ex - endX, o.ez - endZ) < 0.5 || (o.busy && Math.hypot(o.x - endX, o.z - endZ) < 1))) {
-      const myD = Math.hypot(h.x - endX, h.z - endZ);
+    const myD = Math.hypot(h.x - endX, h.z - endZ);
+    // (Queueing only applies close to the spot; further out it is just traffic.)
+    if (!o.parked && myD < AVOID.queueZone && (Math.hypot(o.ex - endX, o.ez - endZ) < 0.5 || (o.busy && Math.hypot(o.x - endX, o.z - endZ) < 1))) {
       const oD = o.busy ? 0 : Math.hypot(o.x - endX, o.z - endZ);
       if (oD < myD - 1e-6 || (Math.abs(oD - myD) <= 1e-6 && o.id < h.id)) {
-        const d = Math.hypot(dx, dz);
-        if (d < 2 * R + AVOID.gap + 1.5) limit(Math.max(0, d - 2 * R - AVOID.gap) * 1.5, o, true);
+        if (o.busy) {
+          // Someone is working there: wait well back, so they can back out and turn.
+          limit(Math.max(0, myD - AVOID.queueStandoff) * 1.5, o, true);
+        } else {
+          const d = Math.hypot(dx, dz);
+          if (d < 2 * R + AVOID.gap + 1.5) limit(Math.max(0, d - 2 * R - AVOID.gap) * 1.5, o, true);
+        }
       }
       continue;
     }
@@ -665,7 +707,7 @@ function avoidance(h: Hauler, tr: Traffic, fx: number, fz: number, endX: number,
     }
   }
   steer = Math.max(-AVOID.maxSteer, Math.min(AVOID.maxSteer, steer));
-  return { cap, steer, heldBy };
+  return { cap, steer, heldBy, queued };
 }
 
 /** Nudge apart haulers that overlap, without pushing anyone into a wall. */
@@ -679,7 +721,7 @@ function separate(sim: Sim, h: Hauler, tr: Traffic) {
     const dz = h.z - o.z;
     const d = Math.hypot(dx, dz);
     if (d >= 2 * R) continue;
-    const push = (2 * R - d) * 0.12;
+    const push = (2 * R - d) * (h.squeeze > 0 ? 0.05 : 0.25);
     if (d < 1e-4) {
       // Exactly on top of each other: split by id.
       px += (h.id < o.id ? 1 : -1) * push;
@@ -688,7 +730,7 @@ function separate(sim: Sim, h: Hauler, tr: Traffic) {
       pz += (dz / d) * push;
     }
   }
-  if ((px || pz) && !blockedAt(sim.d.nav, h.x + px, h.z + pz)) {
+  if ((px || pz) && !solidAt(sim, h.x + px, h.z + pz) && (h.squeeze > 0 || !bumpsInto(h, h.x + px, h.z + pz, tr))) {
     h.x += px;
     h.z += pz;
   }
@@ -785,14 +827,16 @@ function drive(sim: Sim, h: Hauler, tr: Traffic): boolean {
       // if need be.
       const behindTight = Math.abs(aFwd) > Math.PI / 2 && insideTurningCircle(h, px, pz) && ld > 0.4;
       const ahead = arcBlocked(sim, h, k, 1, 1.2) && !lineClear(sim.d.nav, h.x, h.z, px, pz, 0);
-      if ((behindTight || ahead) && h.manT > 10) {
+      // Pressed against something solid (a wide swing, say).
+      const wall = h.speed < 0.1 && h.wait > 15 && solidAt(sim, h.x + Math.sin(h.heading) * 0.3, h.z + Math.cos(h.heading) * 0.3);
+      if ((behindTight || ahead || wall) && h.manT > 10) {
         // Back up if there is room; turn on the spot only when walled in.
         // With another hauler right behind, a tight target is driven round
         // the long way instead.
         const backK = Math.sign(aFwd || 1) * kMax;
         const wallBehind = arcBlocked(sim, h, backK, -1, 1.0);
         if (!wallBehind && !haulerBehind(h, tr)) h.man = 'shunt';
-        else if (ahead || wallBehind) h.man = ahead && wallBehind ? 'pivot' : ahead ? 'pivot' : 'drive';
+        else if (ahead || wall || wallBehind) h.man = ahead || wall ? 'pivot' : 'drive';
         h.manT = 0;
       }
     } else if (h.man === 'shunt') {
@@ -840,7 +884,9 @@ function drive(sim: Sim, h: Hauler, tr: Traffic): boolean {
     h.speed = Math.max(0, h.speed - HAULER.decel * 1.6 * DT);
     if (h.speed < 0.05) {
       const turn = HAULER.pivotRate * DT;
-      h.heading += Math.max(-turn, Math.min(turn, aFwd));
+      const next = h.heading + Math.max(-turn, Math.min(turn, aFwd));
+      if (h.squeeze > 0 || !bumpsInto(h, h.x, h.z, tr, next)) h.heading = next;
+      else h.wait++;
     }
   } else if (wantDir === h.mdir) {
     if (h.man === 'shunt' && !reverseLeg) {
@@ -878,38 +924,153 @@ function drive(sim: Sim, h: Hauler, tr: Traffic): boolean {
   const free = wantSpeed;
   const v = Math.min(wantSpeed, av.cap);
   // Count time spent getting nowhere; past the limit, squeeze through.
-  if (h.squeeze > 0) h.squeeze--;
+  if (h.squeeze > 0) {
+    h.squeeze--;
+    // Finish squeezing past before becoming solid again.
+    if (h.squeeze === 0 && touchingAny(h, tr)) h.squeeze = 1;
+  }
   if (h.speed < 0.3 && av.cap < free) h.wait++;
   else if (h.speed > 0.6) h.wait = 0;
-  if (h.wait > AVOID.patience * TICK_RATE) {
-    h.wait = 0;
-    h.squeeze = Math.round(AVOID.squeeze * TICK_RATE);
+  // The guarantee against deadlock: no metre of headway towards the end of
+  // the path in a long while, whatever it has tried, and it squeezes past.
+  const toEnd = pathRemaining(h);
+  // Waiting in line for a dock is not a deadlock.
+  if (av.queued && av.cap < 0.3) h.bestT = sim.state.tick;
+  if (toEnd < h.best - 1) {
+    h.best = toEnd;
+    h.bestT = sim.state.tick;
+  } else if (h.squeeze === 0) {
+    const stuck = sim.state.tick - h.bestT;
+    const P = Math.round(AVOID.patience * TICK_RATE);
+    if (stuck === P && !reverseLeg) {
+      // First: back right off and plan the way in again (perhaps by the other
+      // lane); or, if it has been going round in circles, turn on the spot.
+      const back = Math.sign(aFwd || 1) / HAULER.minTurnRadius;
+      if (h.wait > 0 && !arcBlocked(sim, h, back, -1, 2) && !haulerBehind(h, tr)) {
+        replan(sim, h);
+        h.man = 'shunt';
+        h.manT = -Math.round(1.5 * TICK_RATE);
+      } else if (h.wait === 0) {
+        h.man = 'pivot';
+        h.manT = 0;
+      }
+    } else if (stuck > 2 * P) {
+      // Still held up by other haulers after all that: squeeze past.
+      h.bestT = sim.state.tick;
+      if (h.wait > 0) h.squeeze = Math.round(AVOID.squeeze * TICK_RATE);
+    }
   }
   if (h.man !== 'pivot' || reverseLeg) {
     if (h.speed < v) h.speed = Math.min(v, h.speed + HAULER.accel * DT);
     else h.speed = Math.max(v, h.speed - HAULER.decel * 1.6 * DT);
   }
   const step = h.speed * DT;
-  if (step <= 0) return false;
+  if (step <= 0) {
+    maybeBackOff(sim, h, tr, av.heldBy, aFwd, reverseLeg);
+    return false;
+  }
   // Heading follows the curvature of the ground covered.
-  h.heading += kappa * step;
-  const [fx, fz] = forward(h.heading);
+  const h0 = h.heading;
+  const [fx, fz] = forward(h0 + kappa * step);
   let nx = h.x + fx * step * dir;
   let nz = h.z + fz * step * dir;
-  // Don't dodge others into buildings, trees or cliffs: if a dodge would, take
-  // the step straight at the path instead. (Following the path itself may
-  // shave a clearance zone on a tight bend; that is only a margin.)
+  // Don't dodge others into the clearance round buildings: if a dodge would,
+  // take the step straight at the path instead.
   const nav = sim.d.nav;
   if (av.steer !== 0 && dir > 0 && blockedAt(nav, nx, nz) && !blockedAt(nav, h.x, h.z)) {
     const d = Math.max(1e-6, Math.hypot(px - h.x, pz - h.z));
     nx = h.x + ((px - h.x) / d) * step;
     nz = h.z + ((pz - h.z) / d) * step;
   }
+  // Buildings, trees and cliffs are solid: slide along them, or stop.
+  if (solidAt(sim, nx, nz) && !solidAt(sim, h.x, h.z)) {
+    [nx, nz] = pushOutOfBuildings(sim, nx, nz);
+    if (solidAt(sim, nx, nz)) {
+      if (!solidAt(sim, nx, h.z)) nz = h.z;
+      else if (!solidAt(sim, h.x, nz)) nx = h.x;
+      else {
+        nx = h.x;
+        nz = h.z;
+      }
+    }
+  }
+  // So are other haulers, except as the very last way out of a deadlock.
+  let bumped = 0;
+  if (h.squeeze === 0 && (nx !== h.x || nz !== h.z)) bumped = bumpsInto(h, nx, nz, tr, h0 + kappa * step);
+  if (bumped) {
+    nx = h.x;
+    nz = h.z;
+  }
   const moved = Math.hypot(nx - h.x, nz - h.z);
+  if (moved < step * 0.3) {
+    // Held up by something solid: stop, and count it as waiting.
+    h.speed = 0;
+    h.wait++;
+  }
+  h.heading = h0 + kappa * Math.min(moved, step);
+  maybeBackOff(sim, h, tr, av.heldBy > 0 ? av.heldBy : bumped, aFwd, reverseLeg);
+
   h.x = nx;
   h.z = nz;
   h.odo += moved;
   if (moved > 0) addWear(g, h.x, h.z, moved);
+  return false;
+}
+
+/**
+ * Stuck behind another hauler for a while: back off a little, if there is room
+ * behind, and try again.
+ */
+function maybeBackOff(sim: Sim, h: Hauler, tr: Traffic, blocker: number, aFwd: number, reverseLeg: boolean) {
+  if (reverseLeg || h.man !== 'drive' || blocker <= 0) return;
+  const o = tr.seen.find((x) => x.id === blocker);
+  if (!o) return;
+  // Something standing still (loading, parked, queued) won't clear the way:
+  // back off and come at it again soon. Two bots blocking each other on the
+  // move: the higher number gives way, after a little longer.
+  const still = o.busy || o.parked || o.speed < 0.1;
+  const after = still ? AVOID.backOffStill : AVOID.backOff;
+  if (h.wait < Math.round(after * TICK_RATE)) return;
+  if (!still && !(blocker < h.id)) return;
+  const back = Math.sign(aFwd || 1) / HAULER.minTurnRadius;
+  if (arcBlocked(sim, h, back, -1, 1.2) || haulerBehind(h, tr)) return;
+  h.man = 'shunt';
+  h.manT = -Math.round(0.8 * TICK_RATE); // a proper back-off, not a twitch
+  h.wait = 0;
+}
+
+/** A hauler's outline at a position and heading. */
+function outline(x: number, z: number, heading: number, grow = 0): OBB {
+  return { cx: x, cz: z, hx: AVOID.halfWidth + grow, hz: AVOID.halfLength + grow, rot: heading };
+}
+
+/**
+ * Would moving to (nx, nz) put this hauler's outline into another's? Moving
+ * apart from one it already touches is always allowed. Its id, or 0.
+ */
+function bumpsInto(h: Hauler, nx: number, nz: number, tr: Traffic, heading = h.heading): number {
+  const mine = outline(nx, nz, heading, 0.02);
+  for (const o of near(tr, nx, nz, 2.6)) {
+    if (o.id === h.id) continue;
+    const rot = Math.atan2(o.fx, o.fz);
+    // Where it was at the start of the tick, and where it is heading this tick.
+    const step = o.speed * DT;
+    const hitNow = obbOverlap(mine, outline(o.x, o.z, rot), 0);
+    const hitNext = step > 0 && obbOverlap(mine, outline(o.x + o.fx * step, o.z + o.fz * step, rot), 0);
+    if (!hitNow && !hitNext) continue;
+    const was = obbOverlap(outline(h.x, h.z, h.heading, 0.02), outline(o.x, o.z, rot), 0);
+    // Already touching: only moves that open the gap are allowed.
+    if (!was || Math.hypot(o.x - nx, o.z - nz) < Math.hypot(o.x - h.x, o.z - h.z) + 1e-4) return o.id;
+  }
+  return 0;
+}
+
+/** Is this hauler's outline touching any other's right now? */
+function touchingAny(h: Hauler, tr: Traffic): boolean {
+  const mine = outline(h.x, h.z, h.heading);
+  for (const o of near(tr, h.x, h.z, 2.6)) {
+    if (o.id !== h.id && obbOverlap(mine, outline(o.x, o.z, Math.atan2(o.fx, o.fz)), 0)) return true;
+  }
   return false;
 }
 

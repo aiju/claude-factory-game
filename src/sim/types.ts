@@ -86,6 +86,9 @@ export interface Hauler {
   wait: number;
   /** Ticks left of squeezing past others after a long wait. */
   squeeze: number;
+  /** Closest it has come to the end of its path, and when (tick). */
+  best: number;
+  bestT: number;
 }
 
 export interface Job {

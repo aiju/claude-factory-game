@@ -39,6 +39,8 @@ export const NAV = {
   clearance: 0.8,
   /** Smoothed paths keep this far from blocked cells, metres. */
   losClearance: 0.35,
+  /** A hauler's centre never comes closer than this to a building's footprint, metres. */
+  solidPad: 0.6,
   /** Extra path cost per metre across the hub's parking rows. */
   parkingCost: 3,
 };
@@ -107,10 +109,10 @@ export const SCENERY = {
 /** Wear, tracks and roads (M3). Wear is roughly "hauler passes" per cell. */
 export const WEAR = {
   /** Enter / leave thresholds, with hysteresis. */
-  trackOn: 10,
-  trackOff: 5,
-  roadOn: 34,
-  roadOff: 20,
+  trackOn: 8,
+  trackOff: 4,
+  roadOn: 26,
+  roadOff: 15,
   /** Wear stops growing here, so abandoned roads fade in reasonable time. */
   max: 60,
   /** Half-lives in seconds by level: none, track, road (slower once paved). */
@@ -144,13 +146,24 @@ export const AVOID = {
   /** Look this far ahead, plus some per m/s of speed. */
   look: 2.5,
   lookPerSpeed: 0.7,
+  /** Queue rules for a dock spot apply within this distance of it, metres. */
+  queueZone: 9,
+  /** While a dock spot is being worked, the next hauler waits this far from it, metres. */
+  queueStandoff: 3,
   /** Gap to keep behind a bot in front, metres (edge to edge). */
   gap: 0.6,
   /** Strongest steering offset for keeping right / passing, radians. */
   maxSteer: 0.6,
-  /** After waiting this long, a bot squeezes past (lower id first), seconds. */
-  patience: 4,
+  /** Stuck this long, the hauler that gives way backs off a little, seconds;
+   *  sooner if what it is stuck against is standing still. */
+  backOff: 3,
+  backOffStill: 1,
+  /** Stuck this long, a hauler squeezes past others: the very last resort. */
+  patience: 12,
   squeeze: 2.5,
+  /** Half length and half width of a hauler for collisions, metres. */
+  halfLength: 0.9,
+  halfWidth: 0.6,
 };
 
 /** Hauler parking at the hub, sized for the rover (about 1.8 × 1.2 m). */
@@ -198,7 +211,7 @@ export const HEAD = {
   /** Turn round to face backwards when this much reversing is left... */
   reverseDistance: 3,
   /** ...or after reversing this long. */
-  reverseTime: 1.2,
+  reverseTime: 2,
   /** Face forward again after driving forward this long. */
   forwardTime: 0.4,
   /** At least this long between turning round and back. */
