@@ -110,34 +110,20 @@ function chevron(b: Builder, cx: number, cy: number, dx: number, dy: number, siz
 }
 
 /**
- * The lower half of an open eye, rounded underneath. The lid edge across the
- * top is an arc that dips in the middle, its radius `lidRadius` times the
- * eye's half-width (the radius of the rounded bottom).
+ * A curved stroke with round ends: an arc of radius `R` about (cx, cy) from
+ * angle a0 to a1 (radians, anticlockwise from +x).
  */
-function halfEye(w: number, h: number, r: number, thick: number, lidRadius = 2): THREE.BufferGeometry {
-  const hw = w / 2;
-  const R0 = lidRadius * hw;
-  const sag = R0 - Math.sqrt(R0 * R0 - hw * hw);
-  const top = -0.005;
-  const bottom = -h / 2;
+function arcStroke(cx: number, cy: number, R: number, a0: number, a1: number, t: number): THREE.BufferGeometry {
   const sh = new THREE.Shape();
-  sh.moveTo(-hw, top);
-  if (sag === 0) sh.lineTo(hw, top);
-  else {
-    // Circle through both top corners and the dipped (or raised) middle.
-    const R = (hw * hw + sag * sag) / (2 * Math.abs(sag));
-    const cy = sag > 0 ? top - sag + R : top - sag - R;
-    const a0 = Math.atan2(top - cy, -hw);
-    const a1 = Math.atan2(top - cy, hw);
-    sh.absarc(0, cy, R, a0, a1, sag < 0);
-  }
-  sh.lineTo(hw, bottom + r);
-  sh.absarc(hw - r, bottom + r, r, 0, -Math.PI / 2, true);
-  sh.lineTo(-hw + r, bottom);
-  sh.absarc(-hw + r, bottom + r, r, -Math.PI / 2, -Math.PI, true);
-  sh.closePath();
-  const g = new THREE.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: false, curveSegments: 12 });
-  g.translate(0, 0, -thick / 2);
+  const end = (a: number): [number, number] => [cx + R * Math.cos(a), cy + R * Math.sin(a)];
+  sh.absarc(cx, cy, R + t / 2, a0, a1, false);
+  const [ex, ey] = end(a1);
+  sh.absarc(ex, ey, t / 2, a1, a1 + Math.PI, false);
+  sh.absarc(cx, cy, R - t / 2, a1, a0, true);
+  const [sx, sy] = end(a0);
+  sh.absarc(sx, sy, t / 2, a0 + Math.PI, a0 + Math.PI * 2, false);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: false, curveSegments: 16 });
+  g.translate(0, 0, -0.006);
   g.deleteAttribute('uv');
   return g;
 }
@@ -154,10 +140,14 @@ function eyeGeometry(ex: Expression): THREE.BufferGeometry {
         case 'blink':
           stroke(b, x - 0.065, -0.01, x + 0.065, -0.01);
           break;
-        case 'sleepy':
-          // Half open: the open eye with its top half lidded.
-          b.geo('eye', halfEye(0.13, 0.2, 0.055, 0.012), x, 0, EYE_Z);
+        case 'sleepy': {
+          // Dozing: a ")" turned on its side, curving down like a closed lid.
+          const span = (120 * Math.PI) / 180;
+          const R = 0.065 / Math.sin(span / 2);
+          const down = -Math.PI / 2;
+          b.geo('eye', arcStroke(0, 0, R, down - span / 2, down + span / 2, STROKE), x, R - 0.06, EYE_Z);
           break;
+        }
         case 'excited':
           // ^ ^
           chevron(b, x, 0.0, 0, 1, 0.12);
