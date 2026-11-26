@@ -69,8 +69,15 @@ export interface Hauler {
   /** Flat [x0, z0, x1, z1, ...] smoothed waypoints; index of next one. */
   path: number[];
   pathI: number;
-  /** The last leg is driven in reverse (parking). */
-  reverseLast: boolean;
+  /** Waypoints from this index on are driven in reverse (parking), or -1. */
+  revFrom: number;
+  /** What it is doing to follow the path: driving it, backing up to turn
+   *  (a shunt), or, when boxed in, turning on the spot. */
+  man: 'drive' | 'shunt' | 'pivot';
+  /** Ticks into the current manoeuvre. */
+  manT: number;
+  /** Direction of travel: 1 forwards, -1 in reverse. */
+  mdir: number;
   /** Ticks to wait before moving (a short pause before pulling out). */
   hold: number;
   /** Total distance driven, metres (stats, tests). */

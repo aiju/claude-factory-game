@@ -69,7 +69,10 @@ export function addHaulers(sim: Sim, n: number): CommandResult {
       bay,
       path: [],
       pathI: 0,
-      reverseLast: false,
+      revFrom: -1,
+      man: 'drive',
+      manT: 0,
+      mdir: 1,
       hold: 0,
       odo: 0,
       wait: 0,
@@ -104,18 +107,19 @@ function isHub(b: Building) {
   return b.store !== null;
 }
 
-function setPath(sim: Sim, h: Hauler, tx: number, tz: number, reverseFrom?: { x: number; z: number }): boolean {
-  const target = reverseFrom ?? { x: tx, z: tz };
-  const p = findPath(sim, h.x, h.z, target.x, target.z);
+function setPath(sim: Sim, h: Hauler, tx: number, tz: number): boolean {
+  const p = findPath(sim, h.x, h.z, tx, tz);
+  h.pathI = 0;
+  h.revFrom = -1;
+  h.man = 'drive';
+  h.manT = 0;
   if (!p) {
     h.path = [];
-    h.pathI = 0;
     return false;
   }
-  if (reverseFrom) p.push(tx, tz);
-  h.path = p;
-  h.pathI = 0;
-  h.reverseLast = !!reverseFrom;
+  // The start is kept as waypoint 0, so the first leg has a segment to follow.
+  h.path = [h.x, h.z, ...p];
+  h.pathI = 1;
   return true;
 }
 
@@ -164,13 +168,60 @@ function goHome(sim: Sim, h: Hauler) {
     h.path = [];
     return;
   }
-  const [fx, fz] = forward(bay.heading);
-  const approach = { x: bay.x + fx * PARKING.approach, z: bay.z + fz * PARKING.approach };
   h.mode = 'home';
-  if (!setPath(sim, h, bay.x, bay.z, approach)) {
+  if (!setParkPath(sim, h, bay) && !setPath(sim, h, bay.x, bay.z)) {
     // Can't get to the bay; wait where we are.
     h.mode = 'idle';
   }
+}
+
+/**
+ * Park the way a driver would: run along in front of the row, stop just past
+ * the bay, then reverse into it along a quarter circle. Picks the side that
+ * is nearer. False if neither side has room.
+ */
+function setParkPath(sim: Sim, h: Hauler, bay: { x: number; z: number; heading: number }): boolean {
+  const nav = sim.d.nav;
+  const R = PARKING.approach;
+  const [ox, oz] = forward(bay.heading);
+  // Along the row: the bay's local x.
+  const ax = Math.cos(bay.heading);
+  const az = -Math.sin(bay.heading);
+  const sides = [1, -1]
+    .map((side) => {
+      const sx = bay.x + ox * R + ax * side * R;
+      const sz = bay.z + oz * R + az * side * R;
+      const pre = { x: sx - ax * side * PARKING.runIn, z: sz - az * side * PARKING.runIn };
+      return { side, sx, sz, pre, d: Math.hypot(pre.x - h.x, pre.z - h.z) };
+    })
+    .sort((a, b) => a.d - b.d);
+  for (const o of sides) {
+    if (!lineClear(nav, o.pre.x, o.pre.z, o.sx, o.sz, 0)) continue;
+    // The arc from the stopping point back into the bay, centred beside the bay.
+    const cx = bay.x + ax * o.side * R;
+    const cz = bay.z + az * o.side * R;
+    const arc: number[] = [];
+    let ok = true;
+    for (let k = 1; k <= 6; k++) {
+      const phi = (Math.PI / 2) * (1 - k / 6);
+      const x = cx - ax * o.side * R * Math.cos(phi) + ox * R * Math.sin(phi);
+      const z = cz - az * o.side * R * Math.cos(phi) + oz * R * Math.sin(phi);
+      if (blockedAt(nav, x, z)) ok = false;
+      arc.push(x, z);
+    }
+    if (!ok) continue;
+    const p = findPath(sim, h.x, h.z, o.pre.x, o.pre.z);
+    if (!p) continue;
+    const path = [h.x, h.z, ...p, o.sx, o.sz];
+    h.revFrom = path.length / 2;
+    path.push(...arc);
+    h.path = path;
+    h.pathI = 1;
+    h.man = 'drive';
+    h.manT = 0;
+    return true;
+  }
+  return false;
 }
 
 function endJob(sim: Sim, job: Job) {
@@ -397,12 +448,19 @@ export function dispatch(sim: Sim) {
 // ---------------------------------------------------------------------------
 // Movement
 
-/** Remaining path length from the hauler's position. */
+/** The last waypoint index of the leg the hauler is on (a leg ends where it must stop and change direction). */
+function legEnd(h: Hauler): number {
+  const count = h.path.length / 2;
+  return h.revFrom >= 0 && h.pathI < h.revFrom ? h.revFrom - 1 : count - 1;
+}
+
+/** Remaining length of the current leg from the hauler's position. */
 function remaining(h: Hauler): number {
   let d = 0;
   let px = h.x;
   let pz = h.z;
-  for (let k = h.pathI; k < h.path.length / 2; k++) {
+  const end = legEnd(h);
+  for (let k = h.pathI; k <= end; k++) {
     const x = h.path[k * 2];
     const z = h.path[k * 2 + 1];
     d += Math.hypot(x - px, z - pz);
@@ -410,6 +468,65 @@ function remaining(h: Hauler): number {
     pz = z;
   }
   return d;
+}
+
+/**
+ * Pure-pursuit target: the nearest point on the segment being followed, then
+ * `L` metres further along the path (clamped to the end of the leg).
+ */
+function lookaheadPoint(h: Hauler, L: number): [number, number] {
+  const end = legEnd(h);
+  const i = Math.max(1, h.pathI);
+  const ax = h.path[i * 2 - 2];
+  const az = h.path[i * 2 - 1];
+  const bx = h.path[i * 2];
+  const bz = h.path[i * 2 + 1];
+  const sx = bx - ax;
+  const sz = bz - az;
+  const s2 = sx * sx + sz * sz;
+  const t = s2 > 1e-9 ? Math.max(0, Math.min(1, ((h.x - ax) * sx + (h.z - az) * sz) / s2)) : 1;
+  let px = ax + sx * t;
+  let pz = az + sz * t;
+  let left = L;
+  for (let k = i; k <= end; k++) {
+    const x = h.path[k * 2];
+    const z = h.path[k * 2 + 1];
+    const seg = Math.hypot(x - px, z - pz);
+    if (seg >= left) return [px + ((x - px) * left) / seg, pz + ((z - pz) * left) / seg];
+    left -= seg;
+    px = x;
+    pz = z;
+  }
+  return [px, pz];
+}
+
+/** Would driving `dist` metres from here, curving at κ (1/m, + = left) in direction `dir`, hit anything? */
+function arcBlocked(sim: Sim, h: Hauler, kappa: number, dir: number, dist: number): boolean {
+  const nav = sim.d.nav;
+  if (blockedAt(nav, h.x, h.z)) return false; // already inside a clearance zone: let it drive out
+  let th = h.heading + (dir < 0 ? Math.PI : 0);
+  let x = h.x;
+  let z = h.z;
+  const ds = 0.3;
+  for (let s = ds; s <= dist + 1e-6; s += ds) {
+    th += kappa * ds;
+    x += Math.sin(th) * ds;
+    z += Math.cos(th) * ds;
+    if (blockedAt(nav, x, z)) return true;
+  }
+  return false;
+}
+
+/** Is (px, pz) inside one of the two circles the hauler cannot turn tighter than? */
+function insideTurningCircle(h: Hauler, px: number, pz: number): boolean {
+  const R = HAULER.minTurnRadius;
+  // Left (heading-increasing) side is local +x: (cos h, -sin h).
+  const lx = Math.cos(h.heading);
+  const lz = -Math.sin(h.heading);
+  for (const s of [1, -1]) {
+    if (Math.hypot(px - (h.x + lx * s * R), pz - (h.z + lz * s * R)) < R * 0.95) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -444,7 +561,7 @@ function buildTraffic(sim: Sim): Traffic {
   const seen: Seen[] = [];
   const cells = new Map<number, number[]>();
   for (const h of sim.state.haulers) {
-    const rev = h.reverseLast && h.path.length > 0 && h.pathI === h.path.length / 2 - 1;
+    const rev = h.mdir < 0;
     const [fx, fz] = forward(h.heading);
     const busy = h.mode === 'loading' || h.mode === 'unloading' || h.hold > 0;
     const k = seen.length;
@@ -577,7 +694,13 @@ function separate(sim: Sim, h: Hauler, tr: Traffic) {
   }
 }
 
-/** Advance along the path. Returns true on arrival at the final point. */
+/**
+ * Advance along the path like a wheeled vehicle: heading only changes while
+ * moving, never tighter than the minimum turning radius. Paths are followed by
+ * pure pursuit. When the way on is inside the turning circle, or turning would
+ * run into something, the hauler backs up to turn (a shunt); only when it is
+ * boxed in both ways does it turn on the spot. Returns true on arrival.
+ */
 function drive(sim: Sim, h: Hauler, tr: Traffic): boolean {
   if (h.hold > 0) {
     h.hold--;
@@ -588,67 +711,172 @@ function drive(sim: Sim, h: Hauler, tr: Traffic): boolean {
     h.speed = 0;
     return true;
   }
-  let tx = h.path[h.pathI * 2];
-  let tz = h.path[h.pathI * 2 + 1];
-  let last = h.pathI === count - 1;
-  // Advance past intermediate waypoints once close; the point to reverse
-  // from must be reached properly.
-  const near = (k: number) => (h.reverseLast && k === count - 2 ? 0.25 : 1.0);
-  while (!last && Math.hypot(tx - h.x, tz - h.z) < near(h.pathI)) {
+  if (h.pathI < 1) h.pathI = 1;
+  // Advance past intermediate waypoints once passed (or nearly reached); the
+  // end of a leg must be reached properly (it is where the hauler stops to
+  // change direction).
+  let end = legEnd(h);
+  while (h.pathI < end) {
+    const ax = h.path[h.pathI * 2 - 2];
+    const az = h.path[h.pathI * 2 - 1];
+    const bx = h.path[h.pathI * 2];
+    const bz = h.path[h.pathI * 2 + 1];
+    const passed = (h.x - bx) * (bx - ax) + (h.z - bz) * (bz - az) >= 0;
+    if (!passed && Math.hypot(bx - h.x, bz - h.z) > 0.6) break;
     h.pathI++;
-    tx = h.path[h.pathI * 2];
-    tz = h.path[h.pathI * 2 + 1];
-    last = h.pathI === count - 1;
   }
-  const reverse = last && h.reverseLast;
-  const dx = tx - h.x;
-  const dz = tz - h.z;
-  const d = Math.hypot(dx, dz);
-  // Arrived: on the spot, or nudged close to it and stopped there.
-  if (last && (d < 0.06 || (!reverse && d < 0.6 && h.speed < 0.05 && h.wait > 15))) {
-    h.x = tx;
-    h.z = tz;
-    h.speed = 0;
-    h.path = [];
-    h.pathI = 0;
-    h.wait = 0;
-    return true;
+  const reverseLeg = h.revFrom >= 0 && h.pathI >= h.revFrom;
+  const ex = h.path[end * 2];
+  const ez = h.path[end * 2 + 1];
+  const dEnd = Math.hypot(ex - h.x, ez - h.z);
+  const final = end === count - 1;
+  const tight = reverseLeg ? 0.15 : 0.3;
+  // Close to a dock spot it cannot drive any closer to (inside its turning
+  // circle): near enough to load from.
+  const closeEnough = !reverseLeg && final && dEnd < 0.9 && insideTurningCircle(h, ex, ez);
+  if (dEnd < tight || closeEnough || (dEnd < 0.7 && h.speed < 0.05 && (h.wait > 15 || h.man !== 'drive'))) {
+    if (final && h.speed > 0.6 && closeEnough && dEnd >= tight) {
+      // Brake to a stop first.
+      h.speed = Math.max(0, h.speed - HAULER.decel * 1.6 * DT);
+      return false;
+    }
+    if (final) {
+      h.speed = 0;
+      h.path = [];
+      h.pathI = 0;
+      h.revFrom = -1;
+      h.wait = 0;
+      h.man = 'drive';
+      h.mdir = 1;
+      return true;
+    }
+    // End of a forward leg: stop, then start the reversing leg.
+    if (h.speed > 0.1) {
+      h.speed = Math.max(0, h.speed - HAULER.decel * 1.6 * DT);
+    } else {
+      h.pathI = end + 1;
+      end = legEnd(h);
+    }
   }
-  const dir = reverse ? -1 : 1;
-  const [hx, hz] = forward(h.heading);
-  const endX = h.path[count * 2 - 2];
-  const endZ = h.path[count * 2 - 1];
-  const av = avoidance(h, tr, hx * dir, hz * dir, endX, endZ, reverse);
 
-  // Steering: towards the waypoint, offset by avoidance (not while reversing
-  // into a bay), and never so far that the bot leaves the path for long.
-  let desired = reverse ? Math.atan2(-dx, -dz) : Math.atan2(dx, dz);
-  if (!reverse) desired += av.steer;
-  const err = angleDiff(desired, h.heading);
-  const maxTurn = HAULER.turnRate * DT;
-  h.heading += Math.max(-maxTurn, Math.min(maxTurn, err));
-
-  // Target speed: ground and crowding set the top speed; then slow on climbs,
-  // for corners, to stop in time, behind others, and while not yet pointing
-  // the right way.
   const g = sim.state.ground;
   const t = sim.d.terrain;
-  const [fx, fz] = forward(h.heading);
-  const top = (reverse ? HAULER.reverseSpeed : HAULER.speed) * groundSpeed(g, h.x, h.z) * crowdFactor(g, h.x, h.z);
-  const climb = (heightAt(t, h.x + fx * 0.6 * dir, h.z + fz * 0.6 * dir) - heightAt(t, h.x, h.z)) / 0.6;
-  let v = top / (1 + HAULER.climbPenalty * Math.max(0, climb));
-  v = Math.min(v, Math.sqrt(2 * HAULER.decel * remaining(h)) + 0.05);
-  if (!last) {
-    const nx = h.path[h.pathI * 2 + 2] - tx;
-    const nz = h.path[h.pathI * 2 + 3] - tz;
-    const turn = Math.abs(angleDiff(Math.atan2(nx, nz), Math.atan2(dx, dz)));
-    const vc = top * Math.max(0.3, 1 - turn / Math.PI);
-    v = Math.min(v, Math.sqrt(vc * vc + 2 * HAULER.decel * Math.max(0, d - 1.0)));
+  const Rmin = HAULER.minTurnRadius;
+  const kMax = 1 / Rmin;
+  const endX = h.path[count * 2 - 2];
+  const endZ = h.path[count * 2 - 1];
+  const L = reverseLeg ? 1.0 : HAULER.lookahead + HAULER.lookaheadPerSpeed * h.speed;
+  const [px, pz] = lookaheadPoint(h, L);
+  const toP = Math.atan2(px - h.x, pz - h.z);
+  const aFwd = angleDiff(toP, h.heading);
+  h.manT++;
+
+  // Decide the manoeuvre. Reversing legs (parking) are simply driven backwards.
+  let dir = reverseLeg ? -1 : 1;
+  let kappa = 0;
+  let wantSpeed = 0;
+  if (!reverseLeg) {
+    if (h.man === 'drive') {
+      const ld = Math.max(0.3, Math.hypot(px - h.x, pz - h.z));
+      let k = Math.abs(aFwd) > Math.PI / 2 ? Math.sign(aFwd) * kMax : (2 * Math.sin(aFwd)) / ld;
+      k = Math.max(-kMax, Math.min(kMax, k));
+      // Behind and too close to swing round to, or a wall in the way of the
+      // turn: back up and try again. Anything else is driven, on full lock
+      // if need be.
+      const behindTight = Math.abs(aFwd) > Math.PI / 2 && insideTurningCircle(h, px, pz) && ld > 0.4;
+      const ahead = arcBlocked(sim, h, k, 1, 1.2) && !lineClear(sim.d.nav, h.x, h.z, px, pz, 0);
+      if ((behindTight || ahead) && h.manT > 10) {
+        // Back up if there is room; turn on the spot only when walled in.
+        // With another hauler right behind, a tight target is driven round
+        // the long way instead.
+        const backK = Math.sign(aFwd || 1) * kMax;
+        const wallBehind = arcBlocked(sim, h, backK, -1, 1.0);
+        if (!wallBehind && !haulerBehind(h, tr)) h.man = 'shunt';
+        else if (ahead || wallBehind) h.man = ahead && wallBehind ? 'pivot' : ahead ? 'pivot' : 'drive';
+        h.manT = 0;
+      }
+    } else if (h.man === 'shunt') {
+      const backK = Math.sign(aFwd || 1) * kMax;
+      const fwdK = Math.max(-kMax, Math.min(kMax, Math.abs(aFwd) > Math.PI / 2 ? Math.sign(aFwd) * kMax : 2 * Math.sin(aFwd) / Math.max(0.3, L)));
+      const clear =
+        Math.abs(aFwd) < (75 * Math.PI) / 180 &&
+        (!arcBlocked(sim, h, fwdK, 1, 1.2) || lineClear(sim.d.nav, h.x, h.z, px, pz, 0));
+      if ((clear && h.manT > 0.6 * TICK_RATE) || h.manT > HAULER.shuntMax * TICK_RATE) {
+        h.man = 'drive';
+        h.manT = 0;
+      } else if (arcBlocked(sim, h, backK, -1, 0.6)) {
+        h.man = 'pivot';
+        h.manT = 0;
+      } else if (haulerBehind(h, tr)) {
+        h.man = 'drive';
+        h.manT = 0;
+      }
+    } else if (h.man === 'pivot') {
+      if (Math.abs(aFwd) < 0.5 || h.manT > 4 * TICK_RATE) {
+        h.man = 'drive';
+        h.manT = 0;
+      }
+    }
   }
-  const free = v;
-  v = Math.min(v, av.cap);
-  const align = Math.cos(Math.min(Math.abs(err), Math.PI / 2));
-  v *= Math.max(0.12, align * align);
+
+  // Direction changes need a stop first.
+  const wantDir = h.man === 'shunt' || reverseLeg ? -1 : 1;
+  if (wantDir !== h.mdir && h.speed > 0.05) {
+    dir = h.mdir;
+    wantSpeed = 0;
+    kappa = 0;
+  } else {
+    h.mdir = wantDir;
+    dir = wantDir;
+  }
+
+  const [hx, hz] = forward(h.heading);
+  const av = avoidance(h, tr, hx * dir, hz * dir, endX, endZ, reverseLeg);
+  const top = (dir < 0 ? HAULER.reverseSpeed : HAULER.speed) * groundSpeed(g, h.x, h.z) * crowdFactor(g, h.x, h.z);
+  const climb = (heightAt(t, h.x + hx * 0.6 * dir, h.z + hz * 0.6 * dir) - heightAt(t, h.x, h.z)) / 0.6;
+
+  if (h.man === 'pivot' && !reverseLeg) {
+    // Boxed in: stop and turn on the spot towards the way on.
+    h.speed = Math.max(0, h.speed - HAULER.decel * 1.6 * DT);
+    if (h.speed < 0.05) {
+      const turn = HAULER.pivotRate * DT;
+      h.heading += Math.max(-turn, Math.min(turn, aFwd));
+    }
+  } else if (wantDir === h.mdir) {
+    if (h.man === 'shunt' && !reverseLeg) {
+      // Back up with opposite lock, swinging the nose round.
+      kappa = Math.sign(aFwd || 1) * kMax;
+      wantSpeed = HAULER.shuntSpeed;
+    } else {
+      // Pure pursuit, in whichever direction this leg is driven.
+      const thM = h.heading + (dir < 0 ? Math.PI : 0);
+      let a = angleDiff(toP, thM);
+      if (dir > 0) a += av.steer;
+      const ld = Math.max(0.3, Math.hypot(px - h.x, pz - h.z));
+      const kNeed = Math.abs(a) > Math.PI / 2 ? Math.sign(a) * kMax * 2 : (2 * Math.sin(a)) / ld;
+      kappa = Math.max(-kMax, Math.min(kMax, kNeed));
+      wantSpeed = top / (1 + HAULER.climbPenalty * Math.max(0, climb));
+      // Slow for curves: sideways acceleration, and more when the path wants
+      // tighter than the vehicle can turn.
+      wantSpeed = Math.min(wantSpeed, Math.sqrt(HAULER.lateralAccel / Math.max(1e-3, Math.abs(kNeed))));
+      if (Math.abs(kNeed) > kMax) wantSpeed = Math.min(wantSpeed, HAULER.tightBendSpeed);
+      // Corners further along.
+      if (h.pathI < end) {
+        const tx = h.path[h.pathI * 2];
+        const tz = h.path[h.pathI * 2 + 1];
+        const nx = h.path[h.pathI * 2 + 2] - tx;
+        const nz = h.path[h.pathI * 2 + 3] - tz;
+        const turn = Math.abs(angleDiff(Math.atan2(nx, nz), Math.atan2(tx - h.x, tz - h.z)));
+        const vc = top * Math.max(0.3, 1 - turn / Math.PI);
+        wantSpeed = Math.min(wantSpeed, Math.sqrt(vc * vc + 2 * HAULER.decel * Math.max(0, Math.hypot(tx - h.x, tz - h.z) - 1.0)));
+      }
+    }
+    // Stop in time at the end of the leg.
+    wantSpeed = Math.min(wantSpeed, Math.sqrt(2 * HAULER.decel * remaining(h)) + 0.05);
+  }
+
+  const free = wantSpeed;
+  const v = Math.min(wantSpeed, av.cap);
   // Count time spent getting nowhere; past the limit, squeeze through.
   if (h.squeeze > 0) h.squeeze--;
   if (h.speed < 0.3 && av.cap < free) h.wait++;
@@ -657,17 +885,25 @@ function drive(sim: Sim, h: Hauler, tr: Traffic): boolean {
     h.wait = 0;
     h.squeeze = Math.round(AVOID.squeeze * TICK_RATE);
   }
-  if (h.speed < v) h.speed = Math.min(v, h.speed + HAULER.accel * DT);
-  else h.speed = Math.max(v, h.speed - HAULER.decel * 1.6 * DT);
+  if (h.man !== 'pivot' || reverseLeg) {
+    if (h.speed < v) h.speed = Math.min(v, h.speed + HAULER.accel * DT);
+    else h.speed = Math.max(v, h.speed - HAULER.decel * 1.6 * DT);
+  }
   const step = h.speed * DT;
+  if (step <= 0) return false;
+  // Heading follows the curvature of the ground covered.
+  h.heading += kappa * step;
+  const [fx, fz] = forward(h.heading);
   let nx = h.x + fx * step * dir;
   let nz = h.z + fz * step * dir;
-  // Don't drive into buildings, trees or cliffs while dodging others: fall
-  // back to heading straight for the waypoint, or stop.
+  // Don't dodge others into buildings, trees or cliffs: if a dodge would, take
+  // the step straight at the path instead. (Following the path itself may
+  // shave a clearance zone on a tight bend; that is only a margin.)
   const nav = sim.d.nav;
-  if (step > 0 && av.steer !== 0 && blockedAt(nav, nx, nz) && !blockedAt(nav, h.x, h.z)) {
-    nx = h.x + (dx / d) * step * (reverse ? 1 : 1);
-    nz = h.z + (dz / d) * step * (reverse ? 1 : 1);
+  if (av.steer !== 0 && dir > 0 && blockedAt(nav, nx, nz) && !blockedAt(nav, h.x, h.z)) {
+    const d = Math.max(1e-6, Math.hypot(px - h.x, pz - h.z));
+    nx = h.x + ((px - h.x) / d) * step;
+    nz = h.z + ((pz - h.z) / d) * step;
   }
   const moved = Math.hypot(nx - h.x, nz - h.z);
   h.x = nx;
@@ -677,13 +913,31 @@ function drive(sim: Sim, h: Hauler, tr: Traffic): boolean {
   return false;
 }
 
+/** Another hauler close behind (so backing up is not an option). */
+function haulerBehind(h: Hauler, tr: Traffic): boolean {
+  const [fx, fz] = forward(h.heading);
+  for (const o of near(tr, h.x, h.z, 3)) {
+    if (o.id === h.id) continue;
+    const dx = o.x - h.x;
+    const dz = o.z - h.z;
+    const back = -(dx * fx + dz * fz);
+    const side = Math.abs(dx * fz - dz * fx);
+    if (back > 0 && back < 2 * AVOID.radius + 0.8 && side < 2 * AVOID.radius) return true;
+  }
+  return false;
+}
+
 function onArrive(sim: Sim, h: Hauler) {
   const job = jobById(sim, h.job);
   switch (h.mode) {
     case 'home': {
       h.mode = 'idle';
+      // Settle square in the bay if it came in close to straight.
       const home = sim.d.byId.get(h.home);
-      if (home) h.heading = bayPose(home, h.bay).heading;
+      if (home) {
+        const want = bayPose(home, h.bay).heading;
+        if (Math.abs(angleDiff(want, h.heading)) < 0.35) h.heading = want;
+      }
       break;
     }
     case 'pickup':

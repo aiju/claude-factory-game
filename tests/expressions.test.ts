@@ -75,7 +75,7 @@ describe('hauler faces', () => {
     const sim = createSim();
     sim.state.haulers.length = 1;
     const h = sim.state.haulers[0];
-    Object.assign(h, { mode: 'home', path: [200, 200], pathI: 0 });
+    Object.assign(h, { mode: 'home', path: [h.x, h.z, 200, 200], pathI: 1 });
     const mem = newFaceMemory(h, 0);
     let blinks = 0;
     let open = 0;

@@ -8,6 +8,15 @@ line or two.
 Decisions taken where the docs were silent, departures from anything marked
 *suggested*, and tunables changed from the design doc's starting values.
 
+- **Haulers drive like wheeled vehicles** (`drive()` in `src/sim/haul.ts`, numbers in `HAULER`), at Emily's request:
+  - Heading changes only while moving, never tighter than a 1.8 m turning radius. Paths are followed by pure pursuit (lookahead 1.4 m plus 0.35 s of travel).
+  - They slow for curves (4.5 m/s² sideways), and to 2 m/s through bends tighter than they can turn.
+  - **Shunt**: when the way on is behind and inside the turning circle, or a turn would run into something, the hauler stops, backs up with opposite lock for up to 3 s, then drives on. This is how they back out of docks. With another hauler right behind, it swings round the long way instead.
+  - **Pivot**: turning on the spot is the last resort, only when walled in ahead and behind. In the M2 chain that is about 0.5% of driving time.
+  - A dock spot inside the turning circle counts as reached within 0.9 m.
+  - **Parking**: run along in front of the row, stop 2.6 m out and 2.6 m to one side of the bay, then reverse in along a quarter circle. The heading squares up on arrival if within 20°.
+  - Paths now keep the start as waypoint 0, and reversing legs are marked by index (`revFrom`). Save version is 4.
+  - **Cost**: the six-hauler M2 chain makes about 51 parts in 10 minutes (77 before) and about 180 in 30 (about 250 before). Turning circles and three-point turns at docks take time. (M2.5)
 - **Eye expressions**, the set Emily asked for (`src/render/expressions.ts`, numbers in `FACE`):
   - neutral `▮ ▮` while driving, with a short blink every 3–6 s per hauler;
   - excited `^ ^` for 1.2 s when a parked hauler gets a job;
@@ -52,6 +61,7 @@ Decisions taken where the docs were silent, departures from anything marked
 Taste-heavy or foundational questions. State the provisional choice you went
 with so work is not blocked.
 
+- **Docks and turning**: haulers arrive at a dock facing the building and mostly have to back out. Real yards have trucks reverse onto the dock instead, which would read well and save a shunt on the way out. Worth doing? (M2.5)
 - **Is the road too loud?** Packed gravel in the palette's `road` grey is the darkest large area on screen once a route is busy (see `m3-roads`). A lighter, browner road would sit back more. (M3)
 - **How fast should roads fade?** Currently about 9 minutes from road to track, and about 16 to grass, after a route is abandoned. Faster would make rerouting feel more responsive; slower makes the ground feel more historical. (M3)
 - **Jams resolve by squeezing**: after 4 s stuck, rovers drive through each other for a moment. It reads as a jam and never locks up, but the overlap is visible. A proper fix is lanes and signals, later. Acceptable for "soft first"? (M3)

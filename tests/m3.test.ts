@@ -99,8 +99,8 @@ describe('M3: congestion', () => {
     const sim = createSim();
     const [h1, h2] = sim.state.haulers;
     const z = 150;
-    Object.assign(h1, { x: 110, z, heading: 90 * D, mode: 'home', path: [146, z], pathI: 0, hold: 0 });
-    Object.assign(h2, { x: 146, z, heading: -90 * D, mode: 'home', path: [110, z], pathI: 0, hold: 0 });
+    Object.assign(h1, { x: 110, z, heading: 90 * D, mode: 'home', path: [110, z, 146, z], pathI: 1, hold: 0 });
+    Object.assign(h2, { x: 146, z, heading: -90 * D, mode: 'home', path: [146, z, 110, z], pathI: 1, hold: 0 });
     let minD = Infinity;
     for (let t = 0; t < 30 * 25; t++) {
       run(sim, 1);

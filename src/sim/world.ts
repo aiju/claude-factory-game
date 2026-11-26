@@ -14,7 +14,7 @@ import { createTerrain, heightAt, type Terrain } from './terrain';
 import type { Building, Hauler, Job } from './types';
 import { ITEM_IDS } from '../data/items';
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export interface WorldState {
   version: number;

@@ -48,8 +48,20 @@ export const HAULER = {
   capacity: 4,
   accel: 3,
   decel: 5,
-  /** rad/s */
-  turnRate: 3.2,
+  /** Tightest turn while moving (radius, metres), like any wheeled vehicle. */
+  minTurnRadius: 1.8,
+  /** Sideways acceleration allowed in a curve, m/s². */
+  lateralAccel: 4.5,
+  /** Speed through a bend tighter than the turning circle allows, m/s. */
+  tightBendSpeed: 2,
+  /** Pure-pursuit lookahead: base metres, plus this per m/s. */
+  lookahead: 1.4,
+  lookaheadPerSpeed: 0.35,
+  /** Backing up to turn: speed, and the longest a shunt lasts (s). */
+  shuntSpeed: 1.2,
+  shuntMax: 3,
+  /** Turning on the spot, only when boxed in, rad/s. */
+  pivotRate: 1.4,
   reverseSpeed: 1.1,
   loadTime: 0.6,
   unloadTime: 0.6,
@@ -151,8 +163,11 @@ export const PARKING = {
   /** Bays down each side of the hub, and their distance from its side. */
   side: 5,
   sideX: 1.3,
-  /** Drive to this far out from the bay, then reverse in. */
+  /** Parking: stop this far out from the bay and this far to one side, then
+   *  reverse in along a quarter circle of this radius. */
   approach: 2.6,
+  /** Straight run along the row before the stopping point, metres. */
+  runIn: 3,
 };
 
 /** Hauler eye expressions (view-side; seconds). */

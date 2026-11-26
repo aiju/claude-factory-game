@@ -107,14 +107,21 @@ describe('M2: haulers', () => {
       job = sim.state.jobs.find((j) => j.loaded && j.to === ids.sm1) ?? null;
     }
     expect(job).not.toBeNull();
-    const carried = job!.n;
-    const before = hubOf(sim).store!.ore!.n;
+    const h = sim.state.haulers.find((x) => x.id === job!.hauler)!;
     must(sim, { type: 'demolish', id: ids.sm1 });
     expectClean(sim);
     expect(job!.to).toBe(sim.state.hub);
-    run(sim, 30 * 40);
+    // Watch that hauler unload at the hub (other haulers may take the ore
+    // straight back out again, so the hub's count alone proves nothing).
+    let delivered = false;
+    for (let t = 0; t < 30 * 60 && !delivered; t++) {
+      const wasUnloading = h.mode === 'unloading' && h.job === job!.id;
+      run(sim, 1);
+      if (wasUnloading && !sim.state.jobs.includes(job!)) delivered = true;
+    }
+    expect(delivered).toBe(true);
+    expect(h.cargo).toBeNull();
     expectClean(sim);
-    expect(hubOf(sim).store!.ore!.n).toBeGreaterThanOrEqual(before + carried);
   });
 
   it('with too few haulers, buildings visibly starve and block', () => {

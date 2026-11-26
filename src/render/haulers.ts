@@ -247,7 +247,7 @@ export class HaulerView {
       if (dt > 0) {
         const k = 1 - Math.exp(-dt * 8);
         // Nose dips when braking; body leans into turns.
-        const dir = h.mode === 'home' && h.reverseLast && h.pathI === h.path.length / 2 - 1 ? -1 : 1;
+        const dir = h.mdir;
         mo.pitch += (Math.max(-0.08, Math.min(0.08, -accel * 0.018 * dir)) - mo.pitch) * k;
         mo.roll += (Math.max(-0.1, Math.min(0.1, -yawRate * speed * 0.03)) - mo.roll) * k;
       }
