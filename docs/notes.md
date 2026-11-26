@@ -11,7 +11,7 @@ Decisions taken where the docs were silent, departures from anything marked
 - **Eye expressions**, the set Emily asked for (`src/render/expressions.ts`, numbers in `FACE`):
   - neutral `▮ ▮` while driving, with a short blink every 3–6 s per hauler;
   - excited `^ ^` for 1.2 s when a parked hauler gets a job;
-  - sleepy: half-open eyes (the open eye with a flat lid across the middle), dimmed, once parked for 1.5 s;
+  - sleepy: half-open eyes (the lower half of the open eye, the lid edge a downward-dipping arc of twice the eye's bottom radius), dimmed, once parked for 1.5 s;
   - frustrated `> <` once a hauler on the road has made less than 0.75 m of headway in 1.5 s (jam or queue), or while squeezing past others; held 0.4 s so it doesn't flicker. On the quiet M2 chain that is about 7% of hauler time, nearly all of it queueing at the single-lane extractor docks.
 
   The style guide's other expressions (look into turns, look at the tray, squint on delivery, glance at a bot giving way, dim amber when a destination is unreachable) are not done. A scenario called `faces` lines up one of each for screenshots (`npm run shots -- faces`). (M2.5)

@@ -109,20 +109,34 @@ function chevron(b: Builder, cx: number, cy: number, dx: number, dy: number, siz
   for (const s of [-1, 1]) stroke(b, cx - (dx * size) / 2 + px * s * size * 0.62, cy - (dy * size) / 2 + py * s * size * 0.62, ax, ay);
 }
 
-/** The lower half of an open eye: flat lid on top, rounded underneath. */
-function halfEye(w: number, h: number, r: number, thick: number): THREE.BufferGeometry {
+/**
+ * The lower half of an open eye, rounded underneath. The lid edge across the
+ * top is an arc that dips in the middle, its radius `lidRadius` times the
+ * eye's half-width (the radius of the rounded bottom).
+ */
+function halfEye(w: number, h: number, r: number, thick: number, lidRadius = 2): THREE.BufferGeometry {
   const hw = w / 2;
+  const R0 = lidRadius * hw;
+  const sag = R0 - Math.sqrt(R0 * R0 - hw * hw);
   const top = -0.005;
   const bottom = -h / 2;
   const sh = new THREE.Shape();
   sh.moveTo(-hw, top);
-  sh.lineTo(hw, top);
+  if (sag === 0) sh.lineTo(hw, top);
+  else {
+    // Circle through both top corners and the dipped (or raised) middle.
+    const R = (hw * hw + sag * sag) / (2 * Math.abs(sag));
+    const cy = sag > 0 ? top - sag + R : top - sag - R;
+    const a0 = Math.atan2(top - cy, -hw);
+    const a1 = Math.atan2(top - cy, hw);
+    sh.absarc(0, cy, R, a0, a1, sag < 0);
+  }
   sh.lineTo(hw, bottom + r);
   sh.absarc(hw - r, bottom + r, r, 0, -Math.PI / 2, true);
   sh.lineTo(-hw + r, bottom);
   sh.absarc(-hw + r, bottom + r, r, -Math.PI / 2, -Math.PI, true);
   sh.closePath();
-  const g = new THREE.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: false, curveSegments: 6 });
+  const g = new THREE.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: false, curveSegments: 12 });
   g.translate(0, 0, -thick / 2);
   g.deleteAttribute('uv');
   return g;
