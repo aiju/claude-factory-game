@@ -7,7 +7,32 @@ import { fbm, smoothstep } from '../sim/noise';
 import { Rng } from '../sim/rng';
 import { heightAt, type Terrain } from '../sim/terrain';
 import { ITEM_COLOURS, PALETTE } from './palette';
+import { NOISE_GLSL } from './kit';
 import { itemMaterial, makeItemGeometry } from './items';
+
+/** Ground texture without textures: blotches, grain and scattered small stones, in world space. */
+function gritty(mat: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vWorldP;\n${NOISE_GLSL}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec3 p = vec3(vWorldP.x, 0.0, vWorldP.z);
+  float broad = kNoise(p * 0.07) * 0.6 + kNoise(p * 0.31) * 0.4;
+  float mid = kNoise(p * 1.9);
+  float grain = kNoise(p * 23.0);
+  diffuseColor.rgb *= (0.84 + 0.3 * broad) * (0.93 + 0.14 * mid) * (0.92 + 0.16 * grain);
+  float stones = smoothstep(0.8, 0.9, kNoise(p * 7.0 + 31.7));
+  diffuseColor.rgb *= 1.0 - 0.2 * stones;
+  float pale = smoothstep(0.84, 0.94, kNoise(p * 4.3 + 71.0));
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.2, pale * 0.4);
+}`);
+  };
+  return mat;
+}
 
 export function createTerrainMesh(t: Terrain): THREE.Group {
   const group = new THREE.Group();
@@ -76,14 +101,14 @@ export function createTerrainMesh(t: Terrain): THREE.Group {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  const mat = gritty(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'terrain';
   group.add(mesh);
 
   // Skirt: four flat slabs around the map, at the level the edge settles to.
-  const skirtMat = new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 0.95 });
+  const skirtMat = gritty(new THREE.MeshStandardMaterial({ color: PALETTE.ground, roughness: 0.95 }));
   const S = t.size;
   const F = 2000;
   for (const [x0, z0, x1, z1] of [

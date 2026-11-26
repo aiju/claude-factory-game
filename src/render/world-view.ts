@@ -83,7 +83,7 @@ export class WorldView {
 
   constructor(private sim: Sim) {
     for (const item of ITEM_IDS) this.items.set(item, new Instancer(makeItemGeometry(item), itemMaterial(item), this.group, 256));
-    const puffMat = new THREE.MeshStandardMaterial({ color: PALETTE.hull, roughness: 1 });
+    const puffMat = new THREE.MeshStandardMaterial({ color: PALETTE.hullDark, roughness: 1, transparent: true, opacity: 0.5, depthWrite: false });
     this.smoke = new Instancer(new THREE.IcosahedronGeometry(0.5, 1), puffMat, this.group, 64, false);
     this.haulers = new HaulerView(sim, this.group);
   }

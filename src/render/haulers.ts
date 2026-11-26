@@ -25,61 +25,75 @@ interface Motion {
 }
 
 // Local frame: +Z forward, origin on the ground under the middle.
-// From above it reads as: wheels peeking out, a white cab with a raked visor
-// and two eyes, an orange hoop, then a dark bed framed by white rails.
+//
+// A six-wheeled rover with a flat cargo deck and a screen for a head. The
+// body is plain working hardware: steel tub, bogies, chipped paint, dirt. The
+// head is tilted up so its visor, and the two eyes on it, face the camera.
 
-/** Tilt that lays a plate on the visor slope (its face pointing forward and up). */
-const VISOR_TILT = -Math.atan2(0.43, 0.44);
-const VISOR_MID = { y: 0.8, z: 0.735 };
-const VISOR_NORMAL = { y: Math.cos(-VISOR_TILT), z: Math.sin(-VISOR_TILT) };
-
-function onVisor(g: THREE.BufferGeometry, x: number, along: number, proud: number): THREE.BufferGeometry {
-  // `along` runs up the slope from its middle; `proud` lifts off the surface.
-  g.rotateX(VISOR_TILT);
-  const upY = Math.cos(VISOR_TILT), upZ = Math.sin(VISOR_TILT);
-  g.translate(x, VISOR_MID.y + upY * along + VISOR_NORMAL.y * proud, VISOR_MID.z + upZ * along + VISOR_NORMAL.z * proud);
-  return g;
-}
+const HEAD = new THREE.Matrix4().makeRotationX(-0.62).setPosition(0, 1.08, 0.6);
 
 function haulerGeometry(): { body: THREE.BufferGeometry; glass: THREE.BufferGeometry; eyes: THREE.BufferGeometry } {
   const c = new Builder();
-  // Wheels, with pale hubs.
-  for (const x of [-0.52, 0.52]) {
-    for (const z of [-0.56, 0.56]) {
-      const w = new THREE.CylinderGeometry(0.25, 0.25, 0.22, 18);
-      w.rotateZ(Math.PI / 2);
-      c.geo('structure', w, x, 0.25, z);
-      const hub = new THREE.CylinderGeometry(0.11, 0.11, 0.24, 12);
-      hub.rotateZ(Math.PI / 2);
-      c.geo('hullSecondary', hub, x, 0.25, z);
+  const R = Math.PI / 2;
+  // Running gear: three wheels a side on a bogie beam.
+  for (const sx of [-1, 1]) {
+    for (const z of [-0.62, 0, 0.62]) {
+      c.cyl('structure', 0.21, 0.21, 0.17, sx * 0.56 + 0.085, 0.21, z, { rotZ: R, segs: 14, c: 0.04 });
+      c.cyl('hullDark', 0.09, 0.09, 0.2, sx * 0.56 + 0.1, 0.21, z, { rotZ: R, segs: 8, c: 0.015, metal: 0.7 });
     }
+    c.box('structure', 0.07, 0.09, 1.36, sx * 0.43, 0.17, 0, { c: 0.015 });
+    for (const z of [-0.31, 0.31]) c.beam('hullDark', [sx * 0.43, 0.24, z], [sx * 0.36, 0.42, z * 0.6], 0.06, { metal: 0.5 });
+    // Side armour and a battery box between the wheels.
+    c.box('hull', 0.05, 0.2, 1.2, sx * 0.44, 0.38, -0.28, { c: 0.02 });
+    c.box('hullSecondary', 0.1, 0.16, 0.34, sx * 0.47, 0.34, -0.31, { c: 0.02 });
+    c.box('logistics', 0.03, 0.15, 0.36, sx * 0.41, 0.6, 0.58, { c: 0.008 });
   }
-  // Chassis and bumpers.
-  c.box('structure', 0.86, 0.2, 1.8, 0, 0.18, 0, { bevel: 0.06 });
-  c.box('structure', 1.0, 0.13, 0.1, 0, 0.3, 0.93, { bevel: 0.04 });
-  // Cab: nose, visor slope, roof.
-  c.profile('hull', [[0.16, 0.34], [0.95, 0.34], [0.95, 0.58], [0.52, 1.02], [0.16, 1.02]], 1.06, 'x', 0, 0, 0, { bevel: 0.15, corner: 0.16 });
-  // A stripe over the cab, just behind the visor.
-  c.box('logistics', 1.09, 0.7, 0.11, 0, 0.345, 0.36, { bevel: 0.05 });
-  // Bed: dark floor, white rails on three sides.
-  c.box('trayFloor', 1.04, 0.08, 1.1, 0, 0.38, -0.42, { bevel: 0.02 });
-  c.box('hull', 0.1, 0.24, 1.12, -0.48, 0.4, -0.42, { bevel: 0.04 });
-  c.box('hull', 0.1, 0.24, 1.12, 0.48, 0.4, -0.42, { bevel: 0.04 });
-  c.box('hull', 1.06, 0.24, 0.1, 0, 0.4, -0.93, { bevel: 0.04 });
-  // Antenna with a small tip.
-  c.cyl('structure', 0.018, 0.022, 0.5, -0.4, 1.0, 0.3, { segs: 6 });
-  c.geo('logistics', new THREE.SphereGeometry(0.055, 10, 8), -0.4, 1.53, 0.3);
+  // Tub.
+  c.box('hullDark', 0.84, 0.26, 1.74, 0, 0.29, 0, { c: 0.05 });
+  c.on('front', 0, 0.31, 0.88, () => c.hazard(0.84, 0.1, 0.07, 0, 0, 0, 0.14));
+  c.box('structure', 0.88, 0.1, 0.07, 0, 0.31, -0.89, { c: 0.02 });
+  for (const sx of [-1, 1]) {
+    c.box('logistics', 0.12, 0.05, 0.03, sx * 0.3, 0.42, -0.885, { c: 0.008 });
+    c.box('eye', 0.1, 0.07, 0.04, sx * 0.3, 0.6, 0.845, { c: 0.01 });
+  }
+  // Cargo deck with a low tube rail on three sides.
+  c.box('trayFloor', 0.98, 0.05, 1.14, 0, 0.55, -0.3, { c: 0.012 });
+  const y0 = 0.6, y1 = 0.8;
+  const zf = 0.24, zb = -0.84, xr = 0.46;
+  for (const [x, z] of [[-xr, zf], [-xr, -0.3], [-xr, zb], [xr, zf], [xr, -0.3], [xr, zb]]) c.beam('hullDark', [x, y0, z], [x, y1, z], 0.04, { metal: 0.4 });
+  c.beam('hullDark', [-xr, y1, zf], [-xr, y1, zb], 0.04, { metal: 0.4 });
+  c.beam('hullDark', [xr, y1, zf], [xr, y1, zb], 0.04, { metal: 0.4 });
+  c.beam('hullDark', [-xr, y1, zb], [xr, y1, zb], 0.04, { metal: 0.4 });
+  // Shoulder block: electronics under the head.
+  c.box('hull', 0.8, 0.27, 0.52, 0, 0.55, 0.58, { c: 0.04 });
+  for (const z of [0.44, 0.52]) c.box('structure', 0.26, 0.02, 0.04, -0.2, 0.82, z, { c: 0 });
+  c.box('hullSecondary', 0.2, 0.06, 0.16, 0.24, 0.82, 0.48, { c: 0.015 });
+  // Neck and a cable.
+  c.cyl('hullDark', 0.07, 0.09, 0.2, 0, 0.8, 0.62, { segs: 10, metal: 0.7 });
+  c.pipe('structure', [[0.2, 0.84, 0.46], [0.22, 1.0, 0.4], [0.16, 1.04, 0.5]], 0.02, { flanges: false });
+  // Head.
+  c.at(HEAD, () => {
+    c.box('hull', 0.78, 0.46, 0.38, 0, -0.23, 0, { c: 0.045 });
+    c.box('structure', 0.7, 0.38, 0.03, 0, -0.19, 0.19, { c: 0.01 });
+    c.box('hullDark', 0.82, 0.05, 0.16, 0, 0.21, 0.13, { c: 0.012 });
+    for (const sx of [-1, 1]) c.cyl('hullDark', 0.09, 0.09, 0.07, sx * 0.39 + 0.035, 0, 0, { rotZ: R, segs: 10, c: 0.015, metal: 0.7 });
+    for (const x of [-0.2, 0, 0.2]) c.box('structure', 0.12, 0.3, 0.03, x, -0.15, -0.195, { c: 0.008 });
+    c.beam('structure', [-0.3, 0.23, -0.1], [-0.34, 0.68, -0.14], 0.02, { round: true });
+    c.geo('logistics', new THREE.SphereGeometry(0.035, 8, 6), -0.34, 0.69, -0.14);
+  });
 
   const glass = new Builder();
-  glass.geo('glass', onVisor(plateGeo(0.86, 0.5, 0.1, 0.03), 0, 0, 0.012));
+  glass.at(HEAD, () => glass.geo('glass', plateGeo(0.66, 0.34, 0.03, 0.02), 0, 0, 0.212));
   const eyes = new Builder();
-  for (const x of [-0.2, 0.2]) eyes.geo('eye', onVisor(plateGeo(0.17, 0.26, 0.075, 0.012), x, 0.01, 0.034));
+  eyes.at(HEAD, () => {
+    for (const x of [-0.15, 0.15]) eyes.geo('eye', plateGeo(0.13, 0.2, 0.055, 0.012), x, 0, 0.226);
+  });
   return { body: c.geometry(), glass: glass.geometry(), eyes: eyes.geometry() };
 }
 
-/** Top of the bed floor, and the middle of the bed. */
-const BED_Y = 0.46;
-const BED_Z = -0.42;
+/** Top of the cargo deck, and its middle. */
+const BED_Y = 0.6;
+const BED_Z = -0.3;
 
 const m4 = new THREE.Matrix4();
 const m4b = new THREE.Matrix4();
@@ -106,7 +120,7 @@ export class HaulerView {
     this.body = new Instancer(g.body, kitMaterial(), parent, 32);
     const glassMat = new THREE.MeshStandardMaterial({ color: PALETTE.glass, roughness: 0.25, metalness: 0 });
     this.glass = new Instancer(g.glass, glassMat, parent, 32, false);
-    this.eyes = new Instancer(g.eyes, glowMaterial('eye', 'eye', 1.0), parent, 32, false);
+    this.eyes = new Instancer(g.eyes, glowMaterial('eye', 'eye', 1.6), parent, 32, false);
   }
 
   setSim(sim: Sim) {

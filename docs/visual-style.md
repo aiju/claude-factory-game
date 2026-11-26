@@ -1,5 +1,12 @@
 # Visual style
 
+> **Under revision.** The code is on a second take: hard-edged, weathered
+> industrial hardware on a dusty world (chamfered steel with chipped paint,
+> panel seams, pipework, trusses, grime), where the haulers' eyes are the one
+> soft, warm thing in the frame. The sections below still describe the first,
+> cleaner direction and will be rewritten once the look is agreed. Until then
+> `src/render/palette.ts`, `kit.ts` and `models.ts` are the reference.
+
 ## The idea
 
 A well-made **scale model of an automated industrial colony**, on a table, in
