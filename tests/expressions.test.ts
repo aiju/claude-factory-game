@@ -80,6 +80,7 @@ describe('hauler faces', () => {
     let blinks = 0;
     let open = 0;
     for (let t = 0; t < 20; t += 1 / 30) {
+      h.odo += 0.13; // driving along at about 4 m/s
       const ex = expressionFor(h, mem, t);
       if (ex === 'blink') blinks++;
       if (ex === 'neutral') open++;
