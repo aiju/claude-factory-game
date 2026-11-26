@@ -100,7 +100,7 @@ Done when: a busy route visibly becomes a road within a few minutes and fades
 after its buildings are removed; a narrow gap between buildings visibly jams.
 
 ## M3.5 — Traffic that flows
-**Status:** in progress. Encounters pass and are tests; timers gone. Throughput and stop/shunt shares not yet met (see `notes.md`).
+**Status:** paused (Emily: on to the next milestones, back to this later). Encounters pass and are tests; timers gone. Throughput and stop/shunt shares not yet met (see `notes.md`).
 
 Review of hauler movement after M3 and the move to solid, wheeled haulers.
 Driving alone is good: a single hauler never stalls. Meeting another hauler
@@ -122,7 +122,7 @@ Done when: the acceptance numbers there are met, the encounter cases are
 tests, and the back-off and patience timers are gone.
 
 ## M4 — Hardening
-**Status:** not started
+**Status:** done, awaiting design review (`npm run shots -- m4-links m4-links-close m4-fading m4-arm m4-cross m4-logistics`)
 
 Link tool. Conveyors (overhead, auto-routed, auto-pylons, height tiers) and
 arms. The link-fed rule. Logistics overlay.

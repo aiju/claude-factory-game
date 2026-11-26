@@ -9,6 +9,7 @@ import { Tools } from './input/tools';
 import { CameraRig, type CamPose } from './render/camera-rig';
 import { GhostView } from './render/ghost';
 import { GroundView } from './render/ground-view';
+import { LogisticsView } from './render/logistics';
 import { createSceneRig } from './render/scene';
 import { createTerrainMesh } from './render/terrain-mesh';
 import { WorldView } from './render/world-view';
@@ -28,7 +29,10 @@ const rig = createSceneRig(app);
 rig.scene.add(createTerrainMesh(game.sim.d.terrain));
 const view = new WorldView(game.sim);
 rig.scene.add(view.group);
-game.beforeTick = () => view.haulers.snapshot();
+game.beforeTick = () => {
+  view.haulers.snapshot();
+  view.links.snapshot();
+};
 const ghost = new GhostView(game.sim);
 rig.scene.add(ghost.group);
 
@@ -51,8 +55,10 @@ const controls = new CameraControls(canvas, camRig, { toolWantsRightDrag: () => 
 if (params.has('noedge') || embed?.edgeScroll === false) controls.edgeScroll = false;
 tools = new Tools(canvas, game, camRig, view, ghost);
 const ground = new GroundView(game.sim, rig.scene);
-const hud = new Hud(game, tools, ghost, rig.camera, ground);
+const logistics = new LogisticsView(game.sim, rig.scene);
+const hud = new Hud(game, tools, ghost, rig.camera, ground, logistics);
 if (params.has('traffic')) hud.toggleTraffic(true);
+if (params.has('logistics')) hud.toggleLogistics(true);
 
 /** Start over with a fresh map and a scenario ('' for an empty map). */
 function loadScenario(name: string) {
@@ -62,6 +68,7 @@ function loadScenario(name: string) {
   view.setSim(game.sim);
   ghost.setSim(game.sim);
   ground.setSim(game.sim);
+  logistics.setSim(game.sim);
   tools!.setTool({ kind: 'select' });
   tools!.select(null);
   Object.assign(camRig.goal, start);
@@ -83,6 +90,7 @@ function render(dt: number, gameDt: number) {
   rig.fog.far = d * 2.2 + 260;
   view.update(alpha, gameDt);
   ground.update(dt);
+  logistics.update(dt);
   rig.updateShadow(camRig.target, d);
   rig.renderer.render(rig.scene, rig.camera);
   hud.update(dt);

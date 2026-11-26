@@ -9,12 +9,13 @@ import { addBuilding, exec, newBuilding, type Command, type CommandResult } from
 import { addHaulers, tickHaulers } from './haul';
 import { createGround, decodeGround, encodeGround, tickGround, type Ground } from './ground';
 import { createNav, navAddBuilding, type NavGrid } from './nav';
+import { navAddSupports, tickLinks } from './links';
 import { slot, tickBuilding } from './prod';
 import { createTerrain, heightAt, type Terrain } from './terrain';
-import type { Building, Hauler, Job } from './types';
+import type { Building, Hauler, Job, Link } from './types';
 import { ITEM_IDS } from '../data/items';
 
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 export interface WorldState {
   version: number;
@@ -26,6 +27,8 @@ export interface WorldState {
   buildings: Building[];
   haulers: Hauler[];
   jobs: Job[];
+  /** Conveyors and arms, sorted by id. */
+  links: Link[];
   /** Indices into terrain.scenery that building has removed. */
   cleared: number[];
   /** Wear, roads and crowding. Typed arrays; serialised as base64. */
@@ -53,7 +56,7 @@ export interface Sim {
 }
 
 function emptyState(map: MapDef): WorldState {
-  return { version: STATE_VERSION, tick: 0, rng: SIM.seed, nextId: 1, hub: 0, buildings: [], haulers: [], jobs: [], cleared: [], ground: createGround(map.size) };
+  return { version: STATE_VERSION, tick: 0, rng: SIM.seed, nextId: 1, hub: 0, buildings: [], haulers: [], jobs: [], links: [], cleared: [], ground: createGround(map.size) };
 }
 
 function buildDerived(sim: Sim) {
@@ -65,6 +68,7 @@ function buildDerived(sim: Sim) {
     indexAdd(sim.d.index, b);
     navAddBuilding(sim, b);
   }
+  for (const l of sim.state.links) navAddSupports(sim, l, 1);
 }
 
 /** A new game: the map, the hub, the starting haulers. */
@@ -114,6 +118,7 @@ export function step(sim: Sim): void {
     if (sim.results.length > 100) sim.results.splice(0, sim.results.length - 100);
   }
   for (const b of sim.state.buildings) tickBuilding(b);
+  tickLinks(sim);
   tickHaulers(sim);
   tickGround(sim);
   sim.state.tick++;

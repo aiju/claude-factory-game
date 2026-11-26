@@ -40,6 +40,36 @@ export const SCENARIOS: Record<string, () => Command[]> = {
    * narrow gap. The hub is stocked with ore; 30 haulers carry it through.
    */
   'm3-gap': () => gapScenario(),
+  /** M4: the M2 chain run for six minutes on haulers, then its four busy flows put on conveyors. */
+  m4: () => SCENARIOS.m2(),
+  /** M4: an extractor and a smelter side by side, joined by an arm. */
+  'm4-arm': () => [
+    { type: 'place', building: 'extractor', x: 152, z: 104, rot: 0 },
+    { type: 'place', building: 'smelter', x: 145.5, z: 104, rot: 0 },
+  ],
+  /** M4: two smelter → fabricator conveyors crossing; ore from the hub by hauler. */
+  'm4-cross': () => [
+    { type: 'place', building: 'smelter', x: 104, z: 100, rot: 90 * D },
+    { type: 'place', building: 'fabricator', x: 146, z: 98, rot: -90 * D },
+    { type: 'place', building: 'smelter', x: 126, z: 88, rot: 0 },
+    { type: 'place', building: 'fabricator', x: 128, z: 112, rot: 180 * D },
+    { type: 'debugStock', item: 'ore', n: 400 },
+  ],
+};
+
+/** Links made after a scenario's buildings, by index into the ids it placed. */
+const SCENARIO_LINKS: Record<string, [number, number][]> = {
+  m4: [
+    [0, 2],
+    [1, 3],
+    [2, 4],
+    [3, 4],
+  ],
+  'm4-arm': [[0, 1]],
+  'm4-cross': [
+    [0, 1],
+    [2, 3],
+  ],
 };
 
 /** Shared with tests/m3.test.ts. */
@@ -71,6 +101,11 @@ export function runScenario(game: Game, name: string) {
       Object.assign(h, { x: 140 + i * 2.2, z: 140, heading: (200 - i * 8) * D, mode: 'home', path: [], hold: 0 });
     });
     game.sim.state.haulers.length = 4;
+  }
+  if (name === 'm4') game.warp(30 * 360);
+  for (const [a, b] of SCENARIO_LINKS[name] ?? []) {
+    const r = game.command({ type: 'link', from: ids[a], to: ids[b] });
+    if (!r.ok) console.warn(`scenario ${name}: link refused: ${r.reason}`);
   }
   if (name === 'm3-fade') {
     game.warp(30 * 600);

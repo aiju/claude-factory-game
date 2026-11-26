@@ -95,6 +95,21 @@ export function clearScenery(sim: Sim, b: Building) {
   });
 }
 
+/** A small solid post (a conveyor support): planned round and solid to haulers. */
+export function navAddPost(sim: Sim, x: number, z: number, r: number, delta: number) {
+  stampDisc(sim.d.nav, x, z, r, delta);
+}
+
+/** Clear trees and boulders within `r` of a point (a support going in). */
+export function clearSceneryNear(sim: Sim, x: number, z: number, r: number) {
+  const gone = new Set(sim.state.cleared);
+  sim.d.terrain.scenery.forEach((s, k) => {
+    if (gone.has(k) || Math.hypot(s.x - x, s.z - z) > r + s.r) return;
+    sim.state.cleared.push(k);
+    stampDisc(sim.d.nav, s.x, s.z, s.r, -1);
+  });
+}
+
 function rasterise(nav: NavGrid, o: OBB, delta: number) {
   const r = inflate(o, NAV.clearance);
   // A band beyond the clearance costs a little more, so routes keep a body's

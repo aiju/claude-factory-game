@@ -11,6 +11,7 @@ import { Instancer } from './instancer';
 import { ITEM_STACK_HEIGHT, itemMaterial, makeItemGeometry } from './items';
 import { kitMaterial } from './kit';
 import { HaulerView } from './haulers';
+import { LinkView } from './links';
 import { buildModel, type BuildingModel, type TraySpot } from './models';
 import { PALETTE } from './palette';
 import { SceneryView } from './scenery';
@@ -76,6 +77,7 @@ export class WorldView {
   private smoke = new SmokeView();
   readonly scenery: SceneryView;
   readonly haulers: HaulerView;
+  readonly links: LinkView;
   private time = 0;
   /** Building id under selection, for a highlight. */
   selected: number | null = null;
@@ -89,6 +91,8 @@ export class WorldView {
     this.scenery = new SceneryView(sim);
     this.group.add(this.scenery.group);
     this.haulers = new HaulerView(sim, this.group);
+    this.links = new LinkView(sim);
+    this.group.add(this.links.group);
   }
 
   setSim(sim: Sim) {
@@ -96,6 +100,7 @@ export class WorldView {
     this.views.clear();
     this.sim = sim;
     this.haulers.setSim(sim);
+    this.links.setSim(sim);
     this.scenery.setSim(sim);
     this.smoke.clear();
   }
@@ -153,6 +158,7 @@ export class WorldView {
       }
     }
     this.haulers.update(alpha, dt, this);
+    this.links.update(alpha, dt, this);
     for (const it of this.items.values()) it.end();
     this.smoke.update(dt);
     this.updateOutline();

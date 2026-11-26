@@ -4,6 +4,7 @@ import { BUILDINGS, type BuildingDef, type BuildingTypeId } from '../data/buildi
 import type { RawItemId } from '../data/items';
 import { BUILD } from '../data/tunables';
 import { aabb, corners, obbOverlap, toWorld, type OBB } from './geom';
+import { linkInTheWay } from './links';
 import { reachabilityProblem } from './nav';
 import { depositAt, heightAt } from './terrain';
 import type { Building } from './types';
@@ -176,6 +177,9 @@ export function validatePlacement(sim: Sim, type: BuildingTypeId, x: number, z: 
     if (od && obbOverlap(body, od)) return { ok: false, reason: `Blocks ${lowerName(o)}'s dock.` };
     if (dock && obbOverlap(dock, ob)) return { ok: false, reason: `Dock is blocked by ${lowerName(o)}.` };
   }
+
+  const link = linkInTheWay(sim, body) ?? (dock ? linkInTheWay(sim, dock) : null);
+  if (link) return { ok: false, reason: link };
 
   if (dock) {
     const probe = { id: -1, type, x, z, rot } as Building;

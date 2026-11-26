@@ -9,10 +9,11 @@ import type { GhostView } from '../render/ghost';
 import { pickGround, screenRay } from '../render/picking';
 import type { WorldView } from '../render/world-view';
 import { buildingAt, validatePlacement } from '../sim/build';
+import { planLink } from '../sim/links';
 import { isTyping } from './camera-controls';
 import { snapPose, type Pose } from './snap';
 
-export type Tool = { kind: 'select' } | { kind: 'place'; type: BuildingTypeId } | { kind: 'demolish' };
+export type Tool = { kind: 'select' } | { kind: 'place'; type: BuildingTypeId } | { kind: 'demolish' } | { kind: 'link' };
 
 export interface ToolState {
   tool: Tool;
@@ -22,10 +23,18 @@ export interface ToolState {
   pose: Pose | null;
   valid: boolean;
   reason: string;
+  /** Link tool: the building a link starts from, and where to show its refusal. */
+  linkFrom: number | null;
+  labelAt: { x: number; y: number } | null;
+  /** A link under the pointer (demolish), and the selected link. */
+  hoverLink: number | null;
+  selectedLink: number | null;
 }
 
 export class Tools {
-  st: ToolState = { tool: { kind: 'select' }, selected: null, hover: null, pose: null, valid: false, reason: '' };
+  st: ToolState = { tool: { kind: 'select' }, selected: null, hover: null, pose: null, valid: false, reason: '', linkFrom: null, labelAt: null, hoverLink: null, selectedLink: null };
+  /** Link tool: dragging from a building (released elsewhere makes the link). */
+  private linkDrag = false;
   /** Raw (unsnapped) rotation for placement; R and right-drag change it. */
   private rawRot = 0;
   private rotDrag: { x: number; moved: boolean } | null = null;
@@ -57,7 +66,10 @@ export class Tools {
     this.st.tool = tool;
     this.rotDrag = null;
     this.view.doomed = null;
+    this.view.links.doomed = null;
     this.st.hover = null;
+    this.st.hoverLink = null;
+    this.endLink();
     if (tool.kind !== 'place') {
       this.ghost.hide();
       this.st.pose = null;
@@ -70,7 +82,60 @@ export class Tools {
   select(id: number | null) {
     this.st.selected = id;
     this.view.selected = id;
+    this.st.selectedLink = null;
     this.onChange();
+  }
+
+  selectLink(id: number | null) {
+    this.st.selected = null;
+    this.view.selected = null;
+    this.st.selectedLink = id;
+    this.onChange();
+  }
+
+  private endLink() {
+    this.st.linkFrom = null;
+    this.st.reason = '';
+    this.st.labelAt = null;
+    this.linkDrag = false;
+    this.view.links.showGhost(null, true);
+    if (this.st.tool.kind === 'link') this.view.selected = null;
+  }
+
+  private tryLink(from: number, to: number) {
+    const res = this.game.command({ type: 'link', from, to });
+    if (!res.ok) this.onMessage(res.reason);
+    this.endLink();
+    this.onChange();
+  }
+
+  /** Link tool: show the route from the start building to the one under the pointer. */
+  private previewLink(target: number | null, x: number, y: number) {
+    const from = this.st.linkFrom;
+    if (from === null || target === null || target === from) {
+      this.view.links.showGhost(null, true);
+      this.st.reason = '';
+      this.st.labelAt = null;
+      return;
+    }
+    const plan = planLink(this.game.sim, from, target);
+    if (plan.ok) {
+      this.view.links.showGhost(plan.path, true, plan.supports);
+      this.st.reason = '';
+    } else {
+      this.view.links.showGhost(plan.path ?? null, false);
+      this.st.reason = plan.reason;
+    }
+    this.st.labelAt = { x, y };
+  }
+
+  /** A link (conveyor or arm) under the pointer, if no building is nearer. */
+  private pickLink(clientX: number, clientY: number): number | null {
+    const ray = new THREE.Raycaster();
+    ray.ray.copy(screenRay(this.rig.camera, this.el, clientX, clientY));
+    const hits = ray.intersectObjects([...this.view.pickableMeshes(), ...this.view.links.pickable()], false);
+    const hit = hits[0];
+    return hit ? (hit.object.userData.linkId ?? null) : null;
   }
 
   private ground(clientX: number, clientY: number): THREE.Vector3 | null {
@@ -98,10 +163,14 @@ export class Tools {
     }
     if (this.st.tool.kind === 'place') this.refreshGhost(e.shiftKey);
     else {
-      const h = this.pickBuilding(e.clientX, e.clientY);
-      if (h !== this.st.hover) {
+      const link = this.st.tool.kind === 'demolish' ? this.pickLink(e.clientX, e.clientY) : null;
+      const h = link === null ? this.pickBuilding(e.clientX, e.clientY) : null;
+      if (this.st.tool.kind === 'link') this.previewLink(h, e.clientX, e.clientY);
+      if (h !== this.st.hover || link !== this.st.hoverLink) {
         this.st.hover = h;
+        this.st.hoverLink = link;
         this.view.doomed = this.st.tool.kind === 'demolish' ? h : null;
+        this.view.links.doomed = link;
         this.onChange();
       }
     }
@@ -153,7 +222,30 @@ export class Tools {
       const res = this.game.command({ type: 'place', building: t.type, x: this.st.pose.x, z: this.st.pose.z, rot: this.st.pose.rot });
       if (!res.ok) this.onMessage(res.reason);
       this.refreshGhost(e.shiftKey);
+    } else if (t.kind === 'link') {
+      const id = this.pickBuilding(e.clientX, e.clientY);
+      if (this.st.linkFrom === null) {
+        if (id === null) return;
+        this.st.linkFrom = id;
+        this.view.selected = id;
+        this.linkDrag = true;
+        this.onChange();
+      } else if (id !== null && id !== this.st.linkFrom) this.tryLink(this.st.linkFrom, id);
+      else if (id === null) {
+        this.endLink();
+        this.onChange();
+      }
     } else if (t.kind === 'demolish') {
+      const link = this.pickLink(e.clientX, e.clientY);
+      if (link !== null) {
+        const res = this.game.command({ type: 'unlink', id: link });
+        if (!res.ok) this.onMessage(res.reason);
+        this.st.hoverLink = null;
+        this.view.links.doomed = null;
+        if (this.st.selectedLink === link) this.selectLink(null);
+        this.onChange();
+        return;
+      }
       const id = this.pickBuilding(e.clientX, e.clientY);
       if (id === null) return;
       const res = this.game.command({ type: 'demolish', id });
@@ -163,11 +255,21 @@ export class Tools {
       this.view.doomed = null;
       this.onChange();
     } else {
-      this.select(this.pickBuilding(e.clientX, e.clientY));
+      const id = this.pickBuilding(e.clientX, e.clientY);
+      const link = this.pickLink(e.clientX, e.clientY);
+      if (link !== null) this.selectLink(link);
+      else this.select(id);
     }
   }
 
   private onUp(e: PointerEvent) {
+    if (e.button === 0 && this.st.tool.kind === 'link' && this.linkDrag) {
+      this.linkDrag = false;
+      const id = this.pickBuilding(e.clientX, e.clientY);
+      // Released on another building: make it. On the same one: wait for a second click.
+      if (id !== null && this.st.linkFrom !== null && id !== this.st.linkFrom) this.tryLink(this.st.linkFrom, id);
+      return;
+    }
     if (e.button === 2 && this.rotDrag) {
       const moved = this.rotDrag.moved;
       this.rotDrag = null;
@@ -179,7 +281,10 @@ export class Tools {
   private onKey(e: KeyboardEvent) {
     if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.code === 'Escape') {
-      if (this.st.tool.kind !== 'select') this.setTool({ kind: 'select' });
+      if (this.st.tool.kind === 'link' && this.st.linkFrom !== null) {
+        this.endLink();
+        this.onChange();
+      } else if (this.st.tool.kind !== 'select') this.setTool({ kind: 'select' });
       else this.select(null);
       return;
     }
@@ -190,6 +295,16 @@ export class Tools {
     }
     if (e.code === 'KeyX') {
       this.setTool(this.st.tool.kind === 'demolish' ? { kind: 'select' } : { kind: 'demolish' });
+      return;
+    }
+    if (e.key === '4') {
+      this.setTool(this.st.tool.kind === 'link' ? { kind: 'select' } : { kind: 'link' });
+      return;
+    }
+    if (e.code === 'Delete' && this.st.selectedLink !== null) {
+      const res = this.game.command({ type: 'unlink', id: this.st.selectedLink });
+      if (!res.ok) this.onMessage(res.reason);
+      else this.selectLink(null);
       return;
     }
     if (e.code === 'Delete' && this.st.selected !== null) {

@@ -8,6 +8,23 @@ line or two.
 Decisions taken where the docs were silent, departures from anything marked
 *suggested*, and tunables changed from the design doc's starting values.
 
+- **Links** (`src/sim/links.ts`, numbers in `src/data/links.ts`). State is in `WorldState.links`; save version 5. (M4)
+  - Sockets: about one every 2.5 m along a building's back and sides, 1.1 m up; never on the dock face. One link per socket.
+  - The tool chooses the type: an arm if a pair of sockets facing each other is within 3 m, otherwise a conveyor (3–60 m). There is no type picker.
+  - What a link carries is worked out live, not stored: whatever the source makes that the destination uses. The hub makes and uses everything. Refused with "Nothing to carry: ..." if that is empty.
+  - Conveyor route: 1 m straight out of each socket, then straight across, or round buildings with one or two bends (a handful of candidate routes, the shortest clear one wins). No waypoints for the player yet. Conveyors don't go over buildings.
+  - Conveyor height: one level run at 3.2 m over the highest ground beneath it, and 0.9 m over any conveyor it crosses (the newer goes up). Ramps rise 0.6 per metre from each socket. Short ones are lower and peak in the middle.
+  - Supports go every 8 m or less, sliding up to 2.5 m along the route to find ground that is clear of footprints, docks, parking bays, cliffs and other supports. They clear trees and rocks under them. They are solid to haulers (a 0.2 m post, planned round like a tree), and a building can't be placed on one or under a conveyor.
+  - Rates: conveyors carry 2 items/s (1 m/s, 0.5 m apart). Arms carry 1.2 items/s, one item at a time.
+  - A single-item link keeps taking from its source while there is room on the belt, so a long belt fills and backs up. A link from the hub picks round-robin among what the destination has room for.
+  - Link-fed rule: an input fed by a link never requests haulers, and the hub does not tidy away an output a link draws from. Links take only items not already promised to a hauler, before dispatch each tick.
+  - Nothing is lost:
+    - Removing a link returns what was on it to the source's output (to the hub if the source is the hub).
+    - Demolishing either end sends it to the hub.
+    - If the destination's recipe changes, items arriving for an input it no longer has go to its output, on offer.
+  - Logistics overlay (L): an arc per source, destination and item that haulers are carrying, in the item's colour and brighter at the destination end, plus a stalk over each input asking with nothing coming.
+  - Link tool (4): drag from one building to another, or click one and then the other. The route previews in orange, or red with the reason. The demolish tool and Delete remove links; clicking a link selects it.
+  - Result on the M2 chain: after 6 minutes on haulers, putting the four ore and plate flows on conveyors leaves one of six haulers busy. Ten minutes later the roads have faded to under 40% of what they were (`tests/m4.test.ts`, `npm run shots -- m4-fading`).
 - **Traffic rewrite to the architecture doc's three layers** (`src/sim/drive.ts`, numbers in `DRIVE`). The old avoidance, its back-off and patience timers, and `AVOID` are gone. (M3.5)
   - Layer 1: standing haulers are stamped as 1.6 m discs onto a per-tick overlay. Routes go round them, and string-pulling now respects the overlay too; before, it pulled routes straight back through. A moving hauler that sees one on its route ahead replans, at most once a second.
   - Layer 2: every tick, 11 curvatures, forward and back, each swept with the real 1.8 × 1.2 m outline. With someone to give way to, each arc is also judged at about a third of the speed, braking included, so it can slow and pass behind instead of swerving.
@@ -38,7 +55,7 @@ Decisions taken where the docs were silent, departures from anything marked
   - **Pivot**: turning on the spot is the last resort, only when walled in ahead and behind. In the M2 chain that is about 0.5% of driving time.
   - A dock spot inside the turning circle counts as reached within 0.9 m.
   - **Parking**: run along in front of the row, stop 2.6 m out and 2.6 m to one side of the bay, then reverse in along a quarter circle. The heading squares up on arrival if within 20°.
-  - Paths now keep the start as waypoint 0, and reversing legs are marked by index (`revFrom`). Save version is 4.
+  - Paths now keep the start as waypoint 0, and reversing legs are marked by index (`revFrom`). Save version is 4 (5 since M4).
   - **Cost**: the six-hauler M2 chain makes about 51 parts in 10 minutes (77 before) and about 180 in 30 (about 250 before). Turning circles and three-point turns at docks take time. (M2.5)
 - **Eye expressions**, the set Emily asked for (`src/render/expressions.ts`, numbers in `FACE`):
   - neutral `▮ ▮` while driving, with a short blink every 3–6 s per hauler;
@@ -84,6 +101,13 @@ Decisions taken where the docs were silent, departures from anything marked
 Taste-heavy or foundational questions. State the provisional choice you went
 with so work is not blocked.
 
+- **How should links look and be chosen?** (M4) Provisional choices, open to change:
+  - conveyors are dark box-frame belts on single posts, with orange housings where they meet a building;
+  - an arm is a pedestal with two limbs (one hull white, one logistics orange);
+  - the tool picks arm or conveyor by distance;
+  - the route can't be bent by hand yet;
+  - the logistics overlay is 1 px lines, like the traffic overlay's routes, and may be too faint.
+- **Should conveyors pass over buildings?** At the moment they route round them. Over the top would need tall supports or high tiers. (M4)
 - **M3.5 acceptance: movement passes, throughput doesn't.** The M2 chain is chaotic: the same run with initial headings nudged by a thousandth of a radian gives anywhere from 16 to 44 parts. So these numbers are means over 8 runs (4 for twelve haulers), not single runs.
   - `npm run encounters`: all 12 cases arrive with no squeezes, all within 1.5× of driving alone (three against three 1.8×, limit 2×). Met.
   - Six haulers on the M2 chain: 33 parts in 10 minutes (target about 50; 30 before M3.5); stopped 11% (target < 5%); shunting 13% (target < 8%); worst stall 12 s (target ≤ 10 s). Not met.
@@ -107,6 +131,8 @@ with so work is not blocked.
 Things that work but are not good yet.
 
 - In heavy jams, rovers still squeeze through each other after 10 s stopped with others about, for 2 s. It is rare on the M2 chain (under 0.5% of road time with six) but visible in the 30-hauler gap jam. (M3.5)
+- A selected link isn't highlighted in the scene, only shown in the panel. (M4)
+- Belts don't animate; only the items on them move. (M4)
 - Haulers queueing for a dock wait on the road behind the one working it, not at a holding point beside the apron. (M3.5)
 - Haulers queueing at a busy dock for more than 1.5 s also look frustrated; it is the same "held up by others" signal as a jam. (M2.5)
 - Bots steering round each other can still clip the corner of a building's clearance zone (not the building itself). (M3)

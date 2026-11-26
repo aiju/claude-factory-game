@@ -9,6 +9,7 @@ import { dockLanes, dockPoint } from './build';
 import type { CommandResult } from './commands';
 import { angleDiff, toWorld } from './geom';
 import { buildTraffic, drive, forward, stampStanding, standingAhead } from './drive';
+import { linkDrawn, linkFed } from './links';
 import { blockedAt, findPath, lineClear, roundCorners } from './nav';
 import { pruneOutputs } from './prod';
 import type { Building, Hauler, Job, Slot } from './types';
@@ -77,7 +78,7 @@ export function addHaulers(sim: Sim, n: number): CommandResult {
       curv: 0,
       replanAt: -1e9,
       nearT: 0,
-      bestLeft: Infinity,
+      bestLeft: 1e9,
       bestLeftT: 0,
     });
   }
@@ -116,7 +117,7 @@ function setPath(sim: Sim, h: Hauler, tx: number, tz: number): boolean {
   h.man = 'drive';
   h.manT = 0;
   h.nearT = 0;
-  h.bestLeft = Infinity;
+  h.bestLeft = 1e9;
   if (!p) {
     h.path = [];
     return false;
@@ -246,7 +247,7 @@ function setAlongsidePath(sim: Sim, h: Hauler, b: Building, x: number, z: number
   h.man = 'drive';
   h.manT = 0;
   h.nearT = 0;
-  h.bestLeft = Infinity;
+  h.bestLeft = 1e9;
   return true;
 }
 
@@ -296,7 +297,7 @@ function setParkPath(sim: Sim, h: Hauler, bay: { x: number; z: number; heading: 
   h.man = 'drive';
   h.manT = 0;
   h.nearT = 0;
-  h.bestLeft = Infinity;
+  h.bestLeft = 1e9;
   return true;
 }
 
@@ -438,10 +439,18 @@ function assign(sim: Sim, h: Hauler, from: Building, to: Building, item: ItemId,
 function collectRequests(sim: Sim): Request[] {
   const reqs: Request[] = [];
   const hub = sim.d.byId.get(sim.state.hub)!;
+  // An input fed by a link doesn't ask haulers; if the link under-delivers,
+  // the building starves (design doc, "Links").
+  const fed = linkFed(sim);
+  const drawn = linkDrawn(sim);
   for (const b of sim.state.buildings) {
     if (isHub(b) || !b.recipe) continue;
     const r = RECIPES[b.recipe];
     for (const [item, s] of Object.entries(b.inp) as [ItemId, Slot][]) {
+      if (fed.has(`${b.id}:${item}`)) {
+        s.since = -1;
+        continue;
+      }
       const perCraft = r.inputs[item] ?? 1;
       const have = s.n + s.r;
       const want = s.cap - have;
@@ -464,6 +473,7 @@ function collectRequests(sim: Sim): Request[] {
     for (const [item, s] of Object.entries(b.out) as [ItemId, Slot][]) {
       const avail = s.n - s.r;
       if (avail <= 0) continue;
+      if (drawn.has(`${b.id}:${item}`)) continue;
       if (s.n >= s.cap || (!consumed.has(item) && avail >= DISPATCH.tidyMin)) {
         reqs.push({ to: hub, item, want: avail, cls: 1, fill: 0, since: sim.state.tick, starving: false, from: b });
       }

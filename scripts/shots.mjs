@@ -41,6 +41,12 @@ const SHOTS = [
   { name: 'm3-fading', scenario: 'm3-fade', ticks: 9000, cam: { x: 135, z: 120, dist: 110, yaw: -25, pitch: 55 } },
   { name: 'm3-gap', scenario: 'm3-gap', ticks: 9000, cam: { x: 136, z: 112, dist: 40, yaw: -20, pitch: 50 } },
   { name: 'm3-gap-traffic', scenario: 'm3-gap', ticks: 9000, traffic: true, cam: { x: 134, z: 110, dist: 80, yaw: -20, pitch: 55 } },
+  { name: 'm4-links', scenario: 'm4', ticks: 1800, cam: { x: 138, z: 116, dist: 70, yaw: -25, pitch: 48 } },
+  { name: 'm4-links-close', scenario: 'm4', ticks: 1800, cam: { x: 146, z: 110, dist: 30, yaw: -35, pitch: 38 } },
+  { name: 'm4-fading', scenario: 'm4', ticks: 18000, cam: { x: 135, z: 120, dist: 110, yaw: -25, pitch: 55 } },
+  { name: 'm4-logistics', scenario: 'm2', ticks: 5400, logistics: true, cam: { x: 135, z: 118, dist: 90, yaw: -25, pitch: 55 } },
+  { name: 'm4-arm', scenario: 'm4-arm', ticks: 900, cam: { x: 149, z: 104, dist: 16, yaw: -30, pitch: 38 } },
+  { name: 'm4-cross', scenario: 'm4-cross', ticks: 2700, cam: { x: 124, z: 100, dist: 60, yaw: -30, pitch: 40 } },
   { name: 'm2-starved', scenario: 'm2-small', ticks: 5400, cam: { x: 140, z: 122, dist: 70, yaw: -25, pitch: 50 } },
 ];
 
@@ -70,6 +76,7 @@ try {
     const q = new URLSearchParams({ noedge: '1', paused: '1' });
     if (s.scenario) q.set('scenario', s.scenario);
     if (s.traffic) q.set('traffic', '1');
+    if (s.logistics) q.set('logistics', '1');
     await page.goto(`http://localhost:${PORT}/?${q}`);
     await page.waitForFunction(() => window.__game?.ready, null, { timeout: 60000 });
     await page.evaluate(({ cam, ticks, js }) => {

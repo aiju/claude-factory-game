@@ -36,7 +36,7 @@ export function encounter(name: string, starts: Start[], maxSeconds = 60): Outco
   while (hs.length < starts.length) hs.push({ ...hs[0], id: sim.state.nextId++ });
   starts.forEach((p, i) => {
     const h: Hauler = hs[i];
-    Object.assign(h, { x: p.x, z: p.z, heading: p.heading, speed: 0, hold: 0, wait: 0, squeeze: 0, man: 'drive', manT: 99, mdir: 1, revFrom: -1, bestLeft: Infinity, bestLeftT: 0, nearT: 0, still: 0, job: null, cargo: null, cargoN: 0 });
+    Object.assign(h, { x: p.x, z: p.z, heading: p.heading, speed: 0, hold: 0, wait: 0, squeeze: 0, man: 'drive', manT: 99, mdir: 1, revFrom: -1, bestLeft: 1e9, bestLeftT: 0, nearT: 0, still: 0, job: null, cargo: null, cargoN: 0 });
     if (p.to) Object.assign(h, { mode: 'drop', path: [p.x, p.z, p.to[0], p.to[1]], pathI: 1 });
     else Object.assign(h, { mode: 'loading', timer: 1e9, path: [], pathI: 0 });
   });

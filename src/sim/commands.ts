@@ -7,6 +7,7 @@ import type { RecipeId } from '../data/recipes';
 import { indexAdd, indexRemove, validatePlacement } from './build';
 import { addHaulers, cancelJobsFor, repathBlocked } from './haul';
 import { clearScenery, navAddBuilding, navRemoveBuilding } from './nav';
+import { addLink, planLink, removeLink } from './links';
 import { applyRecipe, pruneOutputs } from './prod';
 import type { Building } from './types';
 import type { Sim } from './world';
@@ -14,6 +15,8 @@ import type { Sim } from './world';
 export type Command =
   | { type: 'place'; building: BuildingTypeId; x: number; z: number; rot: number; recipe?: RecipeId }
   | { type: 'demolish'; id: number }
+  | { type: 'link'; from: number; to: number }
+  | { type: 'unlink'; id: number }
   | { type: 'setRecipe'; id: number; recipe: RecipeId }
   | { type: 'debugFill'; id: number }
   | { type: 'debugClearOutputs'; id: number }
@@ -72,10 +75,24 @@ export function exec(sim: Sim, cmd: Command): CommandResult {
       if (!b) return { ok: false, reason: 'No such building.' };
       if (b.type === 'hub') return { ok: false, reason: 'The hub cannot be demolished.' };
       cancelJobsFor(sim, b.id, false);
+      for (const l of sim.state.links.filter((x) => x.from === b.id || x.to === b.id)) removeLink(sim, l, true);
       indexRemove(sim.d.index, b);
       sim.d.byId.delete(b.id);
       sim.state.buildings.splice(sim.state.buildings.indexOf(b), 1);
       navRemoveBuilding(sim, b);
+      return { ok: true };
+    }
+    case 'link': {
+      const plan = planLink(sim, cmd.from, cmd.to);
+      if (!plan.ok) return plan;
+      const l = addLink(sim, cmd.from, cmd.to, plan);
+      repathBlocked(sim);
+      return { ok: true, id: l.id };
+    }
+    case 'unlink': {
+      const l = sim.state.links.find((x) => x.id === cmd.id);
+      if (!l) return { ok: false, reason: 'No such link.' };
+      removeLink(sim, l);
       return { ok: true };
     }
     case 'setRecipe': {

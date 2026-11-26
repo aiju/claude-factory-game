@@ -9,6 +9,11 @@ import type { Game, Speed } from '../game';
 import type { Tools } from '../input/tools';
 import type { GhostView } from '../render/ghost';
 import type { GroundView } from '../render/ground-view';
+import type { LogisticsView } from '../render/logistics';
+import { LINK_TYPES } from '../data/links';
+import { carries, linkFed } from '../sim/links';
+import { lowerName } from '../sim/build';
+import type { Link } from '../sim/types';
 import { ITEM_COLOURS, css } from '../render/palette';
 import { craftTicks } from '../sim/prod';
 import type { Building, Slot } from '../sim/types';
@@ -79,6 +84,7 @@ export class Hud {
     private ghost: GhostView,
     private camera: THREE.Camera,
     private ground: GroundView,
+    private logistics: LogisticsView,
   ) {
     this.buildTime();
     this.buildBar();
@@ -118,6 +124,9 @@ export class Hud {
       ['', 'Empty map'],
       ['m2', 'Mine chain'],
       ['m3-gap', 'Narrow gap, 30 haulers'],
+      ['m4', 'Mine chain on conveyors'],
+      ['m4-cross', 'Crossing conveyors'],
+      ['m4-arm', 'An arm'],
       ['m1', 'One of each, filled by hand'],
     ]) {
       const o = el('option', '', sel);
@@ -140,14 +149,15 @@ export class Hud {
         <dt>Zoom</dt><dd>Mouse wheel</dd>
         <dt>Rotate</dt><dd>Q / E or right-drag</dd>
         <dt>Build</dt><dd>1 extractor (on a deposit), 2 smelter, 3 fabricator</dd>
+        <dt>Link</dt><dd>4, then drag from one building to another: a conveyor, or an arm if they are close</dd>
         <dt>Rotate building</dt><dd>R or right-drag while placing; Shift places without snapping</dd>
         <dt>Select</dt><dd>Click a building; Esc to clear</dd>
         <dt>Demolish</dt><dd>X, then click</dd>
-        <dt>Traffic overlay</dt><dd>T</dd>
+        <dt>Overlays</dt><dd>T traffic, L logistics</dd>
         <dt>Speed</dt><dd>Space pauses; + and − change speed</dd>
       </dl>
       <p>Haulers carry everything by themselves. Busy routes wear into tracks, then roads.
-      Select the hub to add haulers.</p>`;
+      A link takes a flow off the haulers. Select the hub to add haulers.</p>`;
     this.help.hidden = true;
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyH' && !e.ctrlKey && !e.metaKey && !e.altKey && (e.target as HTMLElement).tagName !== 'INPUT') this.toggleHelp();
@@ -192,6 +202,11 @@ export class Hud {
         this.tools.setTool(t.kind === 'place' && t.type === type ? { kind: 'select' } : { kind: 'place', type });
       };
     }
+    const lk = el('button', '', this.bar);
+    lk.innerHTML = `<span class="key">4</span>Link`;
+    lk.title = 'Join two buildings with a conveyor, or an arm if they are close. Carries what the first makes that the second uses.';
+    lk.dataset.tool = 'link';
+    lk.onclick = () => this.tools.setTool(this.tools.st.tool.kind === 'link' ? { kind: 'select' } : { kind: 'link' });
     el('span', 'sep', this.bar);
     const d = el('button', '', this.bar);
     d.innerHTML = `<span class="key">X</span>Demolish`;
@@ -203,9 +218,21 @@ export class Hud {
     t.title = 'Overlay: tracks, roads, crowding and where each hauler is going.';
     t.dataset.overlay = 'traffic';
     t.onclick = () => this.toggleTraffic();
+    const lg = el('button', '', this.bar);
+    lg.innerHTML = `<span class="key">L</span>Logistics`;
+    lg.title = 'Overlay: what haulers are carrying from where to where, and inputs asking with nothing on the way.';
+    lg.dataset.overlay = 'logistics';
+    lg.onclick = () => this.toggleLogistics();
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyT' && !e.ctrlKey && !e.metaKey && !e.altKey && (e.target as HTMLElement).tagName !== 'INPUT') this.toggleTraffic();
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.target as HTMLElement).tagName === 'INPUT') return;
+      if (e.code === 'KeyT') this.toggleTraffic();
+      if (e.code === 'KeyL') this.toggleLogistics();
     });
+  }
+
+  toggleLogistics(on = !this.logistics.overlay) {
+    this.logistics.setOverlay(on);
+    this.bar.querySelector('[data-overlay="logistics"]')?.classList.toggle('on', on);
   }
 
   toggleTraffic(on = !this.ground.overlay) {
@@ -216,13 +243,15 @@ export class Hud {
   private refreshTools() {
     const t = this.tools.st.tool;
     for (const b of this.bar.querySelectorAll('button')) {
-      const on = (t.kind === 'place' && b.dataset.tool === t.type) || (t.kind === 'demolish' && b.dataset.tool === 'demolish');
+      const on = (t.kind === 'place' && b.dataset.tool === t.type) || ((t.kind === 'demolish' || t.kind === 'link') && b.dataset.tool === t.kind);
       b.classList.toggle('on', on);
     }
     if (t.kind === 'place') {
       this.hint.textContent = 'Click to place. R or right-drag to rotate. Hold Shift to place without snapping. Esc or right-click to stop.';
+    } else if (t.kind === 'link') {
+      this.hint.textContent = 'Drag from one building to another, or click one and then the other. Esc to stop.';
     } else if (t.kind === 'demolish') {
-      this.hint.textContent = 'Click a building to demolish it. Esc to stop.';
+      this.hint.textContent = 'Click a building or a link to remove it. Esc to stop.';
     } else this.hint.textContent = '';
     this.hint.style.display = this.hint.textContent ? '' : 'none';
     this.lastSide = '';
@@ -244,6 +273,10 @@ export class Hud {
     if (a === 'fill' && id !== null) res = this.game.command({ type: 'debugFill', id });
     if (a === 'clear' && id !== null) res = this.game.command({ type: 'debugClearOutputs', id });
     if (a === 'haulers') res = this.game.command({ type: 'debugAddHaulers', count: Number(btn.dataset.n ?? 1) });
+    if (a === 'unlink' && this.tools.st.selectedLink !== null) {
+      res = this.game.command({ type: 'unlink', id: this.tools.st.selectedLink });
+      if (res.ok) this.tools.selectLink(null);
+    }
     if (a === 'demolish' && id !== null) {
       res = this.game.command({ type: 'demolish', id });
       if (res.ok) this.tools.select(null);
@@ -262,6 +295,11 @@ export class Hud {
       this.label.textContent = st.reason;
       this.label.style.left = `${((p.x + 1) / 2) * window.innerWidth}px`;
       this.label.style.top = `${((1 - p.y) / 2) * window.innerHeight}px`;
+    } else if (st.tool.kind === 'link' && st.reason && st.labelAt) {
+      this.label.style.display = '';
+      this.label.textContent = st.reason;
+      this.label.style.left = `${st.labelAt.x}px`;
+      this.label.style.top = `${st.labelAt.y - 28}px`;
     } else this.label.style.display = 'none';
 
     if (this.toastUntil && performance.now() > this.toastUntil) {
@@ -290,6 +328,17 @@ export class Hud {
   }
 
   private updateSide() {
+    const lid = this.tools.st.selectedLink;
+    const link = lid !== null ? this.game.sim.state.links.find((l) => l.id === lid) : undefined;
+    if (link) {
+      const html = this.linkPanel(link);
+      if (html !== this.lastSide) {
+        this.side.innerHTML = html;
+        this.lastSide = html;
+      }
+      this.side.style.display = '';
+      return;
+    }
     const id = this.tools.st.selected;
     const b = id !== null ? this.game.sim.d.byId.get(id) : undefined;
     if (!b) {
@@ -305,8 +354,27 @@ export class Hud {
     this.side.style.display = '';
   }
 
-  private slotRow(item: ItemId, s: Slot, kind: 'in' | 'out') {
-    const extra = s.r > 0 ? (kind === 'in' ? `${s.r} on the way` : `${s.r} promised`) : '';
+  private linkPanel(l: Link) {
+    const sim = this.game.sim;
+    const a = sim.d.byId.get(l.from);
+    const b = sim.d.byId.get(l.to);
+    const T = LINK_TYPES[l.type];
+    let h = `<h2>${T.name}</h2>`;
+    if (a && b) {
+      const items = carries(a, b);
+      h += `<div class="recipe">${items.map((i) => `${dot(i)} ${itemName(i)}`).join(', ')} from ${lowerName(a)} to ${lowerName(b)}</div>`;
+    }
+    const rate = l.speed / l.spacing;
+    h += `<div class="row"><span class="grow">Length</span><span class="mono">${l.length.toFixed(0)} m</span></div>`;
+    h += `<div class="row"><span class="grow">Up to</span><span class="mono">${rate.toFixed(1)}/s</span></div>`;
+    h += `<div class="row"><span class="grow">On it</span><span class="mono">${l.items.length}</span></div>`;
+    h += `<div class="row made"><span class="grow">Delivered</span><span class="mono">${l.moved}</span></div>`;
+    h += `<div class="buttons"><button data-action="unlink">Remove</button></div>`;
+    return h;
+  }
+
+  private slotRow(item: ItemId, s: Slot, kind: 'in' | 'out', fed = false) {
+    const extra = fed ? 'by link' : s.r > 0 ? (kind === 'in' ? `${s.r} on the way` : `${s.r} promised`) : '';
     const cap = s.cap > 0 ? ` / ${s.cap}` : '';
     return `<div class="row">${dot(item)}<span class="grow">${ITEMS[item].name}</span><span class="mono">${s.n}${cap}</span><span class="note">${extra}</span></div>`;
   }
@@ -330,7 +398,8 @@ export class Hud {
     }
     const ins = Object.entries(b.inp) as [ItemId, Slot][];
     const outs = Object.entries(b.out) as [ItemId, Slot][];
-    if (ins.length) h += `<h3>Input</h3>` + ins.map(([i, s]) => this.slotRow(i, s, 'in')).join('');
+    const fed = linkFed(this.game.sim);
+    if (ins.length) h += `<h3>Input</h3>` + ins.map(([i, s]) => this.slotRow(i, s, 'in', fed.has(`${b.id}:${i}`))).join('');
     if (outs.length) h += `<h3>Output</h3>` + outs.map(([i, s]) => this.slotRow(i, s, 'out')).join('');
     h += `<div class="row made"><span class="grow">Made</span><span class="mono">${b.made}</span></div>`;
     h += `<div class="buttons">`;

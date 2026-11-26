@@ -1,6 +1,7 @@
 // Saved state types. Plain data only: no classes, no references, no Maps.
 
 import type { BuildingTypeId } from '../data/buildings';
+import type { LinkTypeId } from '../data/links';
 import type { ItemId, RawItemId } from '../data/items';
 import type { RecipeId } from '../data/recipes';
 
@@ -110,4 +111,32 @@ export interface Job {
   /** True once the cargo is on the hauler. */
   loaded: boolean;
   created: number;
+}
+
+/** A conveyor or arm carrying items from one building's output to another's input. */
+export interface Link {
+  id: number;
+  type: LinkTypeId;
+  from: number;
+  to: number;
+  /** Socket index on each building (see `sockets()` in links.ts). */
+  fromSocket: number;
+  toSocket: number;
+  /** Route from socket to socket, flat [x, y, z, ...]. */
+  path: number[];
+  /** Length along the route, metres. */
+  length: number;
+  /** Item speed, m/s, and least gap between items, metres. */
+  speed: number;
+  spacing: number;
+  /** Conveyors: height of the belt's level run, and support posts, flat [x, z, ...]. */
+  height: number;
+  supports: number[];
+  /** Items on it, furthest along first: what, and how far along (metres). */
+  items: ItemId[];
+  pos: number[];
+  /** Round robin over the items it can carry. */
+  next: number;
+  /** Items delivered, for display and tests. */
+  moved: number;
 }
