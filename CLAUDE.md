@@ -63,4 +63,4 @@ headless Chromium (Playwright, not a project dependency: it uses the globally
 installed one). Shots are listed at the top of `scripts/shots.mjs`; a shot can
 name a debug scenario (`?scenario=` in `src/debug/scenarios.ts`) and a number
 of ticks to run first. URL parameters for the dev server: `cam=x,z,dist,yawDeg,pitchDeg`,
-`scenario=name`, `noedge` (no edge-scroll), `paused`.
+`scenario=name`, `noedge` (no edge-scroll), `paused`, `traffic` (overlay on).

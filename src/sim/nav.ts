@@ -2,9 +2,10 @@
 // adds cost. A* with string-pulling gives straight-line paths.
 
 import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
-import { NAV, SCENERY } from '../data/tunables';
-import { aabb, inflate, toLocal, type OBB } from './geom';
+import { NAV, PARKING, SCENERY } from '../data/tunables';
+import { aabb, inflate, toLocal, toWorld, type OBB } from './geom';
 import { bodyOBB, buildingBody, buildingDock, dockPoint, lowerName } from './build';
+import { cellTravelCost, MIN_TRAVEL_COST, type Ground } from './ground';
 import { cellSlope } from './terrain';
 import type { Building } from './types';
 import type { Sim } from './world';
@@ -98,10 +99,41 @@ function rasterise(nav: NavGrid, o: OBB, delta: number) {
 
 export function navAddBuilding(sim: Sim, b: Building) {
   rasterise(sim.d.nav, buildingBody(b), 1);
+  if (b.type === 'hub') stampParking(sim.d.nav, b, 1);
+}
+
+/** Through-traffic should not drive across the hub's parking rows: make them costly. */
+function stampParking(nav: NavGrid, hub: Building, delta: number) {
+  const def = BUILDINGS.hub;
+  const P = PARKING;
+  const halfRow = (P.front * P.spacing) / 2;
+  const deep = P.rowZ + 0.9;
+  const strips: OBB[] = [
+    // Front row.
+    { cx: 0, cz: def.d / 2 + deep / 2, hx: halfRow, hz: deep / 2, rot: 0 },
+    // Sides.
+    { cx: -(def.w / 2 + (P.sideX + 0.9) / 2), cz: 0, hx: (P.sideX + 0.9) / 2, hz: (P.side * P.spacing) / 2, rot: 0 },
+    { cx: def.w / 2 + (P.sideX + 0.9) / 2, cz: 0, hx: (P.sideX + 0.9) / 2, hz: (P.side * P.spacing) / 2, rot: 0 },
+    // Overflow rows behind.
+    { cx: 0, cz: -(def.d / 2 + (deep + 2.6) / 2), hx: halfRow, hz: (deep + 2.6) / 2, rot: 0 },
+  ];
+  const n = nav.size;
+  for (const st of strips) {
+    const [cx, cz] = toWorld(hub.x, hub.z, hub.rot, st.cx, st.cz);
+    const o: OBB = { cx, cz, hx: st.hx, hz: st.hz, rot: hub.rot };
+    const a = aabb(o);
+    for (let j = Math.max(0, Math.floor(a.z0)); j <= Math.min(n - 1, Math.floor(a.z1)); j++) {
+      for (let i = Math.max(0, Math.floor(a.x0)); i <= Math.min(n - 1, Math.floor(a.x1)); i++) {
+        const [lx, lz] = toLocal(o.cx, o.cz, o.rot, i + 0.5, j + 0.5);
+        if (Math.abs(lx) <= o.hx && Math.abs(lz) <= o.hz) nav.cost[j * n + i] += delta * NAV.parkingCost;
+      }
+    }
+  }
 }
 
 export function navRemoveBuilding(sim: Sim, b: Building) {
   rasterise(sim.d.nav, buildingBody(b), -1);
+  if (b.type === 'hub') stampParking(sim.d.nav, b, -1);
 }
 
 export function blocked(nav: NavGrid, i: number, j: number): boolean {
@@ -283,7 +315,12 @@ const DIRS: [number, number, number][] = [
 ];
 
 /** Grid A*. Returns the cell list from start to goal, or null. */
-export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: number): number[] | null {
+/** Cost of a metre through cell k: ground speed and crowding, plus slope. */
+function cellCost(nav: NavGrid, g: Ground | null, k: number): number {
+  return (g ? cellTravelCost(g, k) : 1) + nav.cost[k] - 1;
+}
+
+export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: number, ground: Ground | null = null): number[] | null {
   const n = nav.size;
   const comp = components(nav);
   const sk = sj * n + si;
@@ -302,8 +339,9 @@ export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: numb
     const j = (k - i) / n;
     const dx = Math.abs(i - gi);
     const dz = Math.abs(j - gj);
-    return Math.max(dx, dz) + (SQRT2 - 1) * Math.min(dx, dz);
+    return (Math.max(dx, dz) + (SQRT2 - 1) * Math.min(dx, dz)) * hScale;
   };
+  const hScale = ground ? MIN_TRAVEL_COST : 1;
   s.heap.size = 0;
   s.g[sk] = 0;
   s.parent[sk] = -1;
@@ -324,7 +362,7 @@ export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: numb
       if (di !== 0 && dj !== 0 && (blocked(nav, i + di, j) || blocked(nav, i, j + dj))) continue;
       const nk = nj * n + ni;
       if (s.closed[nk] === gen) continue;
-      const g = s.g[k] + len * 0.5 * (nav.cost[k] + nav.cost[nk]);
+      const g = s.g[k] + len * 0.5 * (cellCost(nav, ground, k) + cellCost(nav, ground, nk));
       if (s.seen[nk] !== gen || g < s.g[nk]) {
         s.seen[nk] = gen;
         s.g[nk] = g;
@@ -359,7 +397,7 @@ export function lineClear(nav: NavGrid, ax: number, az: number, bx: number, bz: 
 }
 
 /** Mean cost along a straight line, for checking a shortcut doesn't climb a hill a detour avoided. */
-function lineCost(nav: NavGrid, ax: number, az: number, bx: number, bz: number): number {
+function lineCost(nav: NavGrid, ground: Ground, ax: number, az: number, bx: number, bz: number): number {
   const len = Math.hypot(bx - ax, bz - az);
   const steps = Math.max(1, Math.ceil(len / 0.5));
   let c = 0;
@@ -367,7 +405,7 @@ function lineCost(nav: NavGrid, ax: number, az: number, bx: number, bz: number):
     const t = s / steps;
     const i = Math.floor(ax + (bx - ax) * t);
     const j = Math.floor(az + (bz - az) * t);
-    c += nav.cost[j * nav.size + i];
+    c += cellCost(nav, ground, j * nav.size + i);
   }
   return (c / (steps + 1)) * len;
 }
@@ -381,7 +419,8 @@ export function findPath(sim: Sim, sx: number, sz: number, tx: number, tz: numbe
   const s = nearestFree(nav, Math.floor(sx), Math.floor(sz));
   const g = nearestFree(nav, Math.floor(tx), Math.floor(tz));
   if (!s || !g) return null;
-  const cells = astar(nav, s[0], s[1], g[0], g[1]);
+  const ground = sim.state.ground;
+  const cells = astar(nav, s[0], s[1], g[0], g[1], ground);
   if (!cells) return null;
   const n = nav.size;
   const pts: [number, number][] = cells.map((k) => [(k % n) + 0.5, Math.floor(k / n) + 0.5]);
@@ -394,13 +433,13 @@ export function findPath(sim: Sim, sx: number, sz: number, tx: number, tz: numbe
   let a = 0;
   // Cumulative cell-path cost for comparison.
   const cum = [0];
-  for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + lineCost(nav, pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1]));
+  for (let k = 1; k < pts.length; k++) cum.push(cum[k - 1] + lineCost(nav, ground, pts[k - 1][0], pts[k - 1][1], pts[k][0], pts[k][1]));
   while (a < pts.length - 1) {
     let b = a + 1;
     const [ax, az] = pts[a];
     for (let k = a + 2; k < pts.length; k++) {
       const [bx, bz] = pts[k];
-      if (!lineClear(nav, ax, az, bx, bz) || lineCost(nav, ax, az, bx, bz) > (cum[k] - cum[a]) * 1.05 + 0.5) break;
+      if (!lineClear(nav, ax, az, bx, bz) || lineCost(nav, ground, ax, az, bx, bz) > (cum[k] - cum[a]) * 1.05 + 0.5) break;
       b = k;
     }
     out.push(pts[b][0], pts[b][1]);

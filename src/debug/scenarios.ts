@@ -31,7 +31,26 @@ export const SCENARIOS: Record<string, () => Command[]> = {
   ],
   /** As m2 but with two haulers, to show starving and blocking. */
   'm2-small': () => SCENARIOS.m2(),
+  /** M3: the M2 chain, run for ten minutes, then everything demolished (roads fading). */
+  'm3-fade': () => SCENARIOS.m2(),
+  /**
+   * M3: a wall of buildings between the hub and seven smelters, with one
+   * narrow gap. The hub is stocked with ore; 30 haulers carry it through.
+   */
+  'm3-gap': () => gapScenario(),
 };
+
+/** Shared with tests/m3.test.ts. */
+export function gapScenario(gapX = 136, gapW = 3, extraHaulers = 24): Command[] {
+  const cmds: Command[] = [];
+  for (const [x, z] of [[124, 100], [132, 100], [140, 100], [148, 100], [128, 88], [136, 88], [120, 88]]) {
+    cmds.push({ type: 'place', building: 'smelter', x, z, rot: 0 });
+  }
+  for (let x = gapX - gapW / 2 - 4; x > 72; x -= 8) cmds.push({ type: 'place', building: 'fabricator', x, z: 114, rot: Math.PI });
+  for (let x = gapX + gapW / 2 + 4; x < 196; x += 8) cmds.push({ type: 'place', building: 'fabricator', x, z: 114, rot: Math.PI });
+  cmds.push({ type: 'debugAddHaulers', count: extraHaulers }, { type: 'debugStock', item: 'ore', n: 5000 });
+  return cmds;
+}
 
 export function runScenario(game: Game, name: string) {
   const make = SCENARIOS[name];
@@ -45,6 +64,10 @@ export function runScenario(game: Game, name: string) {
     else if (r.id) ids.push(r.id);
   }
   if (name === 'm1' || name === 'showroom') for (const id of ids) game.command({ type: 'debugFill', id });
+  if (name === 'm3-fade') {
+    game.warp(30 * 600);
+    for (const id of ids) game.command({ type: 'demolish', id });
+  }
   if (name === 'showroom') {
     // A still life. Run the buildings briefly without haulers so they are
     // caught mid-craft, then pose everything by poking state directly.

@@ -35,8 +35,23 @@ export function groundAt(t: Terrain, x: number, z: number): { dirt: number; rock
   return { dirt, rock, deposit };
 }
 
+/**
+ * Shared by the ground shaders: the wear texture (R trampled, G road, B crowd,
+ * one texel per nav cell, see ground-view.ts) and the traffic overlay switch.
+ */
+export const groundUniforms = {
+  uWear: { value: null as THREE.Texture | null },
+  uWearSize: { value: 256 },
+  uOverlay: { value: 0 },
+  uTrack: { value: new THREE.Color(PALETTE.track) },
+  uRoad: { value: new THREE.Color(PALETTE.road) },
+  uHot: { value: new THREE.Color(PALETTE.fault) },
+  uWarm: { value: new THREE.Color(PALETTE.hazard) },
+};
+
 function gritty(mat: THREE.MeshStandardMaterial, perVertex: boolean): THREE.MeshStandardMaterial {
   mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, groundUniforms);
     shader.uniforms.uDirt = { value: new THREE.Color(PALETTE.dirt) };
     shader.uniforms.uRock = { value: new THREE.Color(PALETTE.rock) };
     shader.vertexShader = shader.vertexShader
@@ -52,6 +67,13 @@ ${perVertex ? 'vKind = vec3(kind, normal.y);\nvOre = ore;' : 'vKind = vec3(0.0, 
       .replace('#include <common>', `#include <common>
 uniform vec3 uDirt;
 uniform vec3 uRock;
+uniform sampler2D uWear;
+uniform float uWearSize;
+uniform float uOverlay;
+uniform vec3 uTrack;
+uniform vec3 uRoad;
+uniform vec3 uHot;
+uniform vec3 uWarm;
 varying vec3 vWorldP;
 varying vec3 vKind;
 varying vec3 vOre;
@@ -89,7 +111,17 @@ vec3 kCells(vec2 x) {
   float dirtM = smoothstep(0.3, 0.75, vKind.y + (mid - 0.5) * 0.6 + (fine - 0.5) * 0.3 + (grain - 0.5) * 0.3);
   vec3 dirt = uDirt * (0.84 + 0.3 * broad) * (0.9 + 0.2 * mid) * (0.9 + 0.2 * grain);
   dirt *= 1.0 - 0.22 * smoothstep(0.8, 0.9, fine);
-  vec3 col = mix(grass, dirt, dirtM);
+  // Traffic wears the grass away: first trampled, then a dirt track, then a
+  // packed gravel road with a crisp edge.
+  vec4 wear = texture2D(uWear, vWorldP.xz / uWearSize);
+  float trackM = smoothstep(0.3, 0.75, wear.r + (mid - 0.5) * 0.35 + (fine - 0.5) * 0.25);
+  dirtM = max(dirtM, trackM * 0.9);
+  vec3 col = mix(grass, mix(dirt, uTrack * (0.86 + 0.28 * mid) * (0.9 + 0.2 * grain), trackM * 0.6), dirtM);
+  float roadM = smoothstep(0.42, 0.58, wear.g + (mid - 0.5) * 0.12 + (grain - 0.5) * 0.05);
+  vec3 road = uRoad * (0.9 + 0.18 * broad) * (0.8 + 0.4 * grain) * (0.94 + 0.12 * fine);
+  // Ruts: darker where the wheels run, along the middle of the road.
+  road *= 1.0 - 0.12 * smoothstep(0.85, 1.0, wear.g) * smoothstep(0.4, 0.7, fine);
+  col = mix(col, road, roadM);
 
   // Rock: on steep ground, and where a deposit breaks the surface.
   float steep = smoothstep(0.9, 0.74, vKind.z);
@@ -114,6 +146,17 @@ vec3 kCells(vec2 x) {
   // A few slabs are ore right through.
   rock = mix(rock, gravel * 1.05, lode * step(0.84, cell.z) * (1.0 - joint) * 0.75);
   col = mix(col, rock, rockM);
+  if (uOverlay > 0.5) {
+    // Traffic overlay: a pale, flat ground; roads and tracks drawn in; crowding
+    // from warm to hot.
+    float lum = dot(col, vec3(0.3, 0.55, 0.15));
+    col = vec3(0.2 + lum * 0.3);
+    col = mix(col, vec3(0.2), smoothstep(0.3, 0.6, wear.r) * 0.6);
+    col = mix(col, vec3(0.08), smoothstep(0.4, 0.6, wear.g) * 0.8);
+    float crowd = wear.b;
+    col = mix(col, uWarm, smoothstep(0.12, 0.3, crowd) * 0.85);
+    col = mix(col, uHot, smoothstep(0.3, 0.6, crowd) * 0.9);
+  }
   diffuseColor.rgb = col;
 }`);
   };

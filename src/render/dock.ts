@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
+import { PARKING } from '../data/tunables';
 import { toWorld } from '../sim/geom';
 import { heightAt, type Terrain } from '../sim/terrain';
 import { PALETTE, type PaletteRole } from './palette';
@@ -103,9 +104,10 @@ export function buildDockMesh(t: Terrain, type: BuildingTypeId, x: number, z: nu
   }
   if (type === 'hub') {
     // Parking bay lines along the front row.
-    for (let k = 0; k <= 8; k++) {
-      const lx = -5.6 + k * 1.4;
-      dr.rect(lx - 0.035, z0 + 0.2, lx + 0.035, z0 + 1.9, 'roadMark');
+    const P = PARKING;
+    for (let k = 0; k <= P.front; k++) {
+      const lx = (k - P.front / 2) * P.spacing;
+      dr.rect(lx - 0.035, z0 + 0.25, lx + 0.035, z0 + P.rowZ * 2 - 0.1, 'roadMark');
     }
   }
   return dr.build(material ?? paintMaterial());

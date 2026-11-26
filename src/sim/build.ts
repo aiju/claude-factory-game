@@ -28,6 +28,14 @@ export function buildingDock(b: Building): OBB | null {
 }
 
 /** Where a hauler stops to load or unload. `slot` spreads several haulers across a wide dock. */
+/** How many spots a dock has for haulers to stop at. */
+export function dockLanes(b: Building): number {
+  const def = BUILDINGS[b.type];
+  if (!def.dock) return 1;
+  if (b.type === 'hub') return 5;
+  return Math.max(1, Math.floor(def.dock.w / 1.8));
+}
+
 export function dockPoint(b: Building, slot = 0): [number, number] {
   const def = BUILDINGS[b.type];
   if (!def.dock) return [b.x, b.z];
@@ -35,7 +43,9 @@ export function dockPoint(b: Building, slot = 0): [number, number] {
     const lanes = [0, -2.2, 2.2, -4.4, 4.4];
     return toWorld(b.x, b.z, b.rot, lanes[slot % lanes.length], def.d / 2 + 4.6);
   }
-  const lanes = def.dock.w >= 4 ? [0, -1.2, 1.2] : def.dock.w >= 3 ? [0, -0.8, 0.8] : [0];
+  // Lanes 1.8 m apart, so rovers can load side by side without touching.
+  const n = Math.max(1, Math.floor(def.dock.w / 1.8));
+  const lanes = Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * 1.8);
   return toWorld(b.x, b.z, b.rot, lanes[slot % lanes.length], def.d / 2 + def.dock.d * 0.55);
 }
 

@@ -33,6 +33,12 @@ const SHOTS = [
   { name: 'm2-factory', scenario: 'm2', ticks: 5400, cam: { x: 140, z: 122, dist: 85, yaw: -25, pitch: 50 } },
   { name: 'm2-close', scenario: 'm2', ticks: 5400, cam: { x: 140, z: 118, dist: 40, yaw: -35, pitch: 42 } },
   { name: 'm2-hub', scenario: 'm2', ticks: 5400, cam: { x: 128, z: 134, dist: 30, yaw: -20, pitch: 45 } },
+  { name: 'm3-roads', scenario: 'm2', ticks: 18000, cam: { x: 135, z: 120, dist: 110, yaw: -25, pitch: 55 } },
+  { name: 'm3-roads-close', scenario: 'm2', ticks: 18000, cam: { x: 140, z: 116, dist: 45, yaw: -30, pitch: 50 } },
+  { name: 'm3-traffic', scenario: 'm2', ticks: 18000, traffic: true, cam: { x: 135, z: 120, dist: 110, yaw: -25, pitch: 55 } },
+  { name: 'm3-fading', scenario: 'm3-fade', ticks: 9000, cam: { x: 135, z: 120, dist: 110, yaw: -25, pitch: 55 } },
+  { name: 'm3-gap', scenario: 'm3-gap', ticks: 9000, cam: { x: 136, z: 112, dist: 40, yaw: -20, pitch: 50 } },
+  { name: 'm3-gap-traffic', scenario: 'm3-gap', ticks: 9000, traffic: true, cam: { x: 134, z: 110, dist: 80, yaw: -20, pitch: 55 } },
   { name: 'm2-starved', scenario: 'm2-small', ticks: 5400, cam: { x: 140, z: 122, dist: 70, yaw: -25, pitch: 50 } },
 ];
 
@@ -61,6 +67,7 @@ try {
     page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && !m.text().includes('THREE'))) console.error(`[${s.name}]`, m.text()); });
     const q = new URLSearchParams({ noedge: '1', paused: '1' });
     if (s.scenario) q.set('scenario', s.scenario);
+    if (s.traffic) q.set('traffic', '1');
     await page.goto(`http://localhost:${PORT}/?${q}`);
     await page.waitForFunction(() => window.__game?.ready, null, { timeout: 60000 });
     await page.evaluate(({ cam, ticks, js }) => {

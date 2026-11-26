@@ -36,9 +36,11 @@ export const NAV = {
   /** Path cost multiplier per unit of slope. */
   slopeCost: 2.5,
   /** Building footprints are inflated by this for navigation, metres. */
-  clearance: 0.6,
+  clearance: 0.8,
   /** Smoothed paths keep this far from blocked cells, metres. */
   losClearance: 0.35,
+  /** Extra path cost per metre across the hub's parking rows. */
+  parkingCost: 3,
 };
 
 export const HAULER = {
@@ -63,7 +65,8 @@ export const DISPATCH = {
   interval: 10,
   /** Consumers only ask for a top-up of at least this many, unless starving. */
   minRequest: 4,
-  /** Outputs are tidied into the hub once this many are waiting, or when full. */
+  /** The hub takes from a producer when its tray is full, or, for items nothing
+   *  consumes, once this many are waiting (so end products go in full loads). */
   tidyMin: 4,
 };
 
@@ -87,4 +90,67 @@ export const SCENERY = {
   boulderChance: 0.07,
   /** A building clears scenery this far beyond its body, metres. */
   buildMargin: 1.2,
+};
+
+/** Wear, tracks and roads (M3). Wear is roughly "hauler passes" per cell. */
+export const WEAR = {
+  /** Enter / leave thresholds, with hysteresis. */
+  trackOn: 10,
+  trackOff: 5,
+  roadOn: 34,
+  roadOff: 20,
+  /** Wear stops growing here, so abandoned roads fade in reasonable time. */
+  max: 60,
+  /** Half-lives in seconds by level: none, track, road (slower once paved). */
+  halfLife: [150, 210, 300],
+  /** Speed multipliers by level, used by movement and path cost alike. */
+  speed: [1, 1.25, 1.6],
+  /** Ticks between decay and level updates. */
+  interval: 30,
+  /** Radius over which a passing bot spreads its wear, metres. */
+  spread: 1.3,
+};
+
+/** Soft congestion (M3). */
+export const CROWD = {
+  /** Smoothing time constant of the density field, seconds. */
+  tau: 6,
+  /** Ticks between density updates. */
+  interval: 10,
+  /** Density (≈ bots within a cell's 3×3 block) that causes no slowdown. */
+  comfortable: 0.7,
+  /** Speed is divided by 1 + slow × excess density. */
+  slow: 0.5,
+  /** Extra path cost per unit of excess density, metres per cell. */
+  pathCost: 3,
+};
+
+/** Local avoidance between haulers (M3). */
+export const AVOID = {
+  /** Treat a hauler as a disc of this radius, metres. */
+  radius: 0.8,
+  /** Look this far ahead, plus some per m/s of speed. */
+  look: 2.5,
+  lookPerSpeed: 0.7,
+  /** Gap to keep behind a bot in front, metres (edge to edge). */
+  gap: 0.6,
+  /** Strongest steering offset for keeping right / passing, radians. */
+  maxSteer: 0.6,
+  /** After waiting this long, a bot squeezes past (lower id first), seconds. */
+  patience: 4,
+  squeeze: 2.5,
+};
+
+/** Hauler parking at the hub, sized for the rover (about 1.8 × 1.2 m). */
+export const PARKING = {
+  /** Bays in the painted row in front of the hub. */
+  front: 7,
+  spacing: 1.7,
+  /** Distance of the bay row's centre line from the hub's front, metres. */
+  rowZ: 1.25,
+  /** Bays down each side of the hub, and their distance from its side. */
+  side: 5,
+  sideX: 1.3,
+  /** Drive to this far out from the bay, then reverse in. */
+  approach: 2.6,
 };

@@ -7,13 +7,14 @@ import { HUB_START, SIM } from '../data/tunables';
 import { createIndex, indexAdd, type SpatialIndex } from './build';
 import { addBuilding, exec, newBuilding, type Command, type CommandResult } from './commands';
 import { addHaulers, tickHaulers } from './haul';
+import { createGround, decodeGround, encodeGround, tickGround, type Ground } from './ground';
 import { createNav, navAddBuilding, type NavGrid } from './nav';
 import { slot, tickBuilding } from './prod';
 import { createTerrain, heightAt, type Terrain } from './terrain';
 import type { Building, Hauler, Job } from './types';
 import { ITEM_IDS } from '../data/items';
 
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 
 export interface WorldState {
   version: number;
@@ -27,6 +28,8 @@ export interface WorldState {
   jobs: Job[];
   /** Indices into terrain.scenery that building has removed. */
   cleared: number[];
+  /** Wear, roads and crowding. Typed arrays; serialised as base64. */
+  ground: Ground;
 }
 
 /** Everything that is not saved: rebuilt from state + map. */
@@ -35,6 +38,8 @@ export interface Derived {
   byId: Map<number, Building>;
   index: SpatialIndex;
   nav: NavGrid;
+  /** Bumped whenever a cell changes road level, so the view can refresh. */
+  groundVersion: number;
 }
 
 export interface Sim {
@@ -47,8 +52,8 @@ export interface Sim {
   results: { cmd: Command; res: CommandResult; tick: number }[];
 }
 
-function emptyState(): WorldState {
-  return { version: STATE_VERSION, tick: 0, rng: SIM.seed, nextId: 1, hub: 0, buildings: [], haulers: [], jobs: [], cleared: [] };
+function emptyState(map: MapDef): WorldState {
+  return { version: STATE_VERSION, tick: 0, rng: SIM.seed, nextId: 1, hub: 0, buildings: [], haulers: [], jobs: [], cleared: [], ground: createGround(map.size) };
 }
 
 function buildDerived(sim: Sim) {
@@ -64,7 +69,7 @@ function buildDerived(sim: Sim) {
 
 /** A new game: the map, the hub, the starting haulers. */
 export function createSim(map: MapDef = MAP): Sim {
-  const sim = simFromState(emptyState(), map);
+  const sim = simFromState(emptyState(map), map);
   const h = map.hub;
   const def = BUILDINGS.hub;
   let y = -Infinity;
@@ -87,7 +92,7 @@ export function simFromState(state: WorldState, map: MapDef = MAP): Sim {
   const terrain = createTerrain(map);
   const sim: Sim = {
     state,
-    d: { terrain, byId: new Map(), index: createIndex(), nav: { size: 0 } as NavGrid },
+    d: { terrain, byId: new Map(), index: createIndex(), nav: { size: 0 } as NavGrid, groundVersion: 0 },
     map,
     pending: [],
     results: [],
@@ -110,6 +115,7 @@ export function step(sim: Sim): void {
   }
   for (const b of sim.state.buildings) tickBuilding(b);
   tickHaulers(sim);
+  tickGround(sim);
   sim.state.tick++;
 }
 
@@ -118,12 +124,13 @@ export function run(sim: Sim, ticks: number) {
 }
 
 export function serialise(sim: Sim): string {
-  return JSON.stringify(sim.state);
+  return JSON.stringify({ ...sim.state, ground: encodeGround(sim.state.ground) });
 }
 
 export function deserialise(json: string, map: MapDef = MAP): Sim {
-  const state = JSON.parse(json) as WorldState;
-  if (state.version !== STATE_VERSION) throw new Error(`Unsupported save version ${state.version}`);
+  const raw = JSON.parse(json);
+  if (raw.version !== STATE_VERSION) throw new Error(`Unsupported save version ${raw.version}`);
+  const state = { ...raw, ground: decodeGround(raw.ground) } as WorldState;
   return simFromState(state, map);
 }
 

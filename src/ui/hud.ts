@@ -8,6 +8,7 @@ import { TICK_RATE } from '../data/tunables';
 import type { Game, Speed } from '../game';
 import type { Tools } from '../input/tools';
 import type { GhostView } from '../render/ghost';
+import type { GroundView } from '../render/ground-view';
 import { ITEM_COLOURS, css } from '../render/palette';
 import { craftTicks } from '../sim/prod';
 import type { Building, Slot } from '../sim/types';
@@ -72,6 +73,7 @@ export class Hud {
     private tools: Tools,
     private ghost: GhostView,
     private camera: THREE.Camera,
+    private ground: GroundView,
   ) {
     this.buildTime();
     this.buildBar();
@@ -135,6 +137,20 @@ export class Hud {
     d.innerHTML = `<span class="key">X</span>Demolish`;
     d.dataset.tool = 'demolish';
     d.onclick = () => this.tools.setTool(this.tools.st.tool.kind === 'demolish' ? { kind: 'select' } : { kind: 'demolish' });
+    el('span', 'sep', this.bar);
+    const t = el('button', '', this.bar);
+    t.innerHTML = `<span class="key">T</span>Traffic`;
+    t.title = 'Overlay: tracks, roads, crowding and where each hauler is going.';
+    t.dataset.overlay = 'traffic';
+    t.onclick = () => this.toggleTraffic();
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyT' && !e.ctrlKey && !e.metaKey && !e.altKey && (e.target as HTMLElement).tagName !== 'INPUT') this.toggleTraffic();
+    });
+  }
+
+  toggleTraffic(on = !this.ground.overlay) {
+    this.ground.setOverlay(on);
+    this.bar.querySelector('[data-overlay="traffic"]')?.classList.toggle('on', on);
   }
 
   private refreshTools() {

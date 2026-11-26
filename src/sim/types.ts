@@ -75,6 +75,10 @@ export interface Hauler {
   hold: number;
   /** Total distance driven, metres (stats, tests). */
   odo: number;
+  /** Ticks spent held up by other haulers while wanting to move. */
+  wait: number;
+  /** Ticks left of squeezing past others after a long wait. */
+  squeeze: number;
 }
 
 export interface Job {

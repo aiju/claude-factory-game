@@ -7,6 +7,7 @@ import { CameraControls } from './input/camera-controls';
 import { Tools } from './input/tools';
 import { CameraRig, type CamPose } from './render/camera-rig';
 import { GhostView } from './render/ghost';
+import { GroundView } from './render/ground-view';
 import { createSceneRig } from './render/scene';
 import { createTerrainMesh } from './render/terrain-mesh';
 import { WorldView } from './render/world-view';
@@ -45,7 +46,9 @@ let tools: Tools | null = null;
 const controls = new CameraControls(canvas, camRig, { toolWantsRightDrag: () => tools?.wantsRightDrag() ?? false });
 if (params.has('noedge')) controls.edgeScroll = false;
 tools = new Tools(canvas, game, camRig, view, ghost);
-const hud = new Hud(game, tools, ghost, rig.camera);
+const ground = new GroundView(game.sim, rig.scene);
+const hud = new Hud(game, tools, ghost, rig.camera, ground);
+if (params.has('traffic')) hud.toggleTraffic(true);
 if (params.has('paused')) hud.setSpeed(0);
 
 window.addEventListener('resize', () => rig.resize());
@@ -56,6 +59,7 @@ function render(dt: number, gameDt: number) {
   rig.fog.near = d * 1.1 + 40;
   rig.fog.far = d * 2.2 + 260;
   view.update(alpha, gameDt);
+  ground.update(dt);
   rig.updateShadow(camRig.target, d);
   rig.renderer.render(rig.scene, rig.camera);
   hud.update(dt);
@@ -81,6 +85,8 @@ requestAnimationFrame(frame);
   rig,
   view,
   tools,
+  hud,
+  ground,
   THREE,
   setCam(p: Partial<CamPose>) {
     Object.assign(camRig.goal, p);
@@ -90,6 +96,7 @@ requestAnimationFrame(frame);
   renderNow(seconds = 0) {
     const steps = Math.ceil(seconds * 30);
     for (let i = 0; i < steps; i++) view.update(1, 1 / 30);
+    ground.update(Infinity);
     render(0, 0);
   },
   ready: true,

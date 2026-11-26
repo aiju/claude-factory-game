@@ -43,7 +43,7 @@ fleet is too small. Headless scenario test passes with no leaked reservations.
 point where the core loop can be judged, so expect tuning and visual notes.
 
 ## M2.5 — Review pass
-**Status:** not started
+**Status:** in progress (see Progress below)
 
 Outcome of the design review of M2. The loop works and the structure is
 sound; this pass is about the picture and one dispatch rule. The style guide
@@ -73,8 +73,9 @@ above", roofs, ground paint, terrain, hauler shape and eyes): re-read
 rover haulers with static eyes, all four buildings, lighting, vegetated
 ground, rocky deposits, trees and boulders (solid in the sim, cleared by
 building), particle smoke, a `showroom` scenario and `show-*` screenshots.
-Still open: eye expressions (2), nav radius and parking spacing to match the
-larger hauler (2), hub tidying (6), ambient occlusion.
+Still open: eye expressions (2), ambient occlusion. Done by the implementer
+with M3: nav radius, dock lanes and parking spacing for the larger hauler (2),
+and hub tidying (6, trip mix reported in `notes.md`).
 
 Answers to the other M2 questions: keep six starting haulers and do not tune
 pressure until roads exist (M3 changes the numbers); pivot-and-reverse
@@ -86,7 +87,7 @@ you can tell at a glance which way each hauler faces and what it carries;
 nothing in frame is pure black or louder than the buildings; tests pass.
 
 ## M3 — The ground remembers
-**Status:** not started
+**Status:** done, awaiting design review (`npm run shots -- m3-roads m3-roads-close m3-traffic m3-fading m3-gap m3-gap-traffic`)
 
 Wear field, tracks and roads with speed bonus and path preference, rendered as
 ground blend. Soft congestion and local avoidance. Traffic overlay.

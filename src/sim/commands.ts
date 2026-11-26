@@ -2,6 +2,7 @@
 // validates and applies them.
 
 import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
+import type { ItemId } from '../data/items';
 import type { RecipeId } from '../data/recipes';
 import { indexAdd, indexRemove, validatePlacement } from './build';
 import { addHaulers, cancelJobsFor, repathBlocked } from './haul';
@@ -16,7 +17,8 @@ export type Command =
   | { type: 'setRecipe'; id: number; recipe: RecipeId }
   | { type: 'debugFill'; id: number }
   | { type: 'debugClearOutputs'; id: number }
-  | { type: 'debugAddHaulers'; count: number };
+  | { type: 'debugAddHaulers'; count: number }
+  | { type: 'debugStock'; item: ItemId; n: number };
 
 export type CommandResult = { ok: true; id?: number } | { ok: false; reason: string };
 
@@ -100,5 +102,12 @@ export function exec(sim: Sim, cmd: Command): CommandResult {
     }
     case 'debugAddHaulers':
       return addHaulers(sim, cmd.count);
+    case 'debugStock': {
+      const hub = sim.d.byId.get(sim.state.hub);
+      if (!hub?.store) return { ok: false, reason: 'There is no hub.' };
+      const s = hub.store[cmd.item]!;
+      s.n = Math.max(s.r, s.n + cmd.n);
+      return { ok: true };
+    }
   }
 }
