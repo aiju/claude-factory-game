@@ -32,8 +32,8 @@ export function dockLanes(b: Building): number {
   const def = BUILDINGS[b.type];
   if (!def.dock) return 1;
   if (b.type === 'hub') return 5;
-  // Lanes 1.8 m apart, so rovers can load side by side without touching.
-  return Math.max(1, Math.floor(def.dock.w / 1.8));
+  // Building docks: haulers pull up alongside, one at a time.
+  return 1;
 }
 
 /** Where a hauler stops to load or unload. `slot` spreads several haulers across a wide dock. */

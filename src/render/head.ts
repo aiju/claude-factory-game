@@ -4,7 +4,7 @@
 
 import { HEAD } from '../data/tunables';
 import { angleDiff } from '../sim/geom';
-import { lookaheadPoint, remaining } from '../sim/haul';
+import { lookaheadPoint, remaining } from '../sim/drive';
 import type { Hauler } from '../sim/types';
 import type { Sim } from '../sim/world';
 

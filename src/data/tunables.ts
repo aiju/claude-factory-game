@@ -37,10 +37,17 @@ export const NAV = {
   slopeCost: 2.5,
   /** Building footprints are inflated by this for navigation, metres. */
   clearance: 0.8,
+  /** Beyond the clearance, a band this wide costs this much more per metre. */
+  bandWidth: 0.8,
+  bandCost: 0.6,
   /** Smoothed paths keep this far from blocked cells, metres. */
   losClearance: 0.35,
+  /** Trees and boulders are inflated by this for navigation (a hauler's half-width and a little), metres. */
+  sceneryClearance: 0.7,
   /** A hauler's centre never comes closer than this to a building's footprint, metres. */
   solidPad: 0.6,
+  /** Extra path cost per metre across other buildings' dock aprons. */
+  apronCost: 2,
   /** Extra path cost per metre across the hub's parking rows. */
   parkingCost: 3,
 };
@@ -139,48 +146,82 @@ export const CROWD = {
   pathCost: 3,
 };
 
-/** Local avoidance between haulers (M3). */
-export const AVOID = {
-  /** Treat a hauler as a disc of this radius, metres. */
-  radius: 0.8,
-  /** Look this far ahead, plus some per m/s of speed. */
-  look: 2.5,
-  lookPerSpeed: 0.7,
-  /** Queue rules for a dock spot apply within this distance of it, metres. */
-  queueZone: 9,
-  /** While a dock spot is being worked, the next hauler waits this far from it, metres. */
-  queueStandoff: 3,
-  /** Gap to keep behind a bot in front, metres (edge to edge). */
-  gap: 0.6,
-  /** Strongest steering offset for keeping right / passing, radians. */
-  maxSteer: 0.6,
-  /** Stuck this long, the hauler that gives way backs off a little, seconds;
-   *  sooner if what it is stuck against is standing still. */
-  backOff: 3,
-  backOffStill: 1,
-  /** Stuck this long, a hauler squeezes past others: the very last resort. */
-  patience: 12,
-  squeeze: 2.5,
-  /** Half length and half width of a hauler for collisions, metres. */
+/** Hauler driving and traffic (M3.5): see "Hauler movement and traffic" in architecture.md. */
+export const DRIVE = {
+  /** Curvatures tried each tick, across the turning circle. */
+  fan: 11,
+  /** Half length and half width of a hauler's outline, metres. */
   halfLength: 0.9,
   halfWidth: 0.6,
+  /** Margin kept round the outline against buildings, trees, cliffs; and against other haulers. */
+  solidMargin: 0.1,
+  haulerMargin: 0.15,
+  /** A hauler that has right of way is avoided with this much more room, and this many seconds' slack. */
+  priorityMargin: 0.35,
+  prioritySlack: 0.7,
+  /** Held up only by moving traffic: wait this long before backing up, seconds. */
+  waitForTraffic: 3,
+  /** Look ahead along the path for the point to steer for, metres. */
+  pursuit: 3.5,
+  /** Arcs are judged by where they get to after this far, metres. */
+  judge: 2.5,
+  /** Step when sweeping an arc, metres. */
+  sweepStep: 0.25,
+  /** An arc must be free for at least this far to be driven, metres. */
+  minFree: 0.4,
+  /** Stopped this long with no way forward, try reversing, seconds. */
+  reverseAfter: 0.5,
+  /** Once reversing, keep at it at least this long, and at most this long, seconds. */
+  minReverse: 0.6,
+  maxReverse: 3,
+  /** Within 3 m of a dock spot this long without getting there: plan a fresh
+   *  approach; this long: stop wherever it is if within nearEnough metres. */
+  reapproachAfter: 5,
+  nearEnoughAfter: 10,
+  nearEnough: 2.2,
+  /** Backing onto a dock or bay taking longer than this, drive on forwards instead, seconds. */
+  maxReverseLeg: 8,
+  /** Score penalty per metre of an arc driven backwards. */
+  reverseCost: 1,
+  /** Giving way: arcs are also judged at this fraction of the current speed,
+   *  and slowing down for someone costs this much in the arc score (metres). */
+  yieldSpeed: 0.35,
+  yieldCost: 0.4,
+  /** Stuck this long, a hauler may clip trees, rocks or cliffs for a short escape, seconds. */
+  wedgedAfter: 2,
+  /** No headway along the path for this long (a three-point turn going round in circles): turn on the spot, seconds. */
+  loopAfter: 6,
+  /** Boxed in this long, turn on the spot if there is room, seconds. */
+  pivotAfter: 1,
+  /** Stopped this long with other haulers about: squeeze past (last resort), seconds. */
+  squeezeAfter: 10,
+  squeeze: 2,
+  /** A hauler standing still this long is an obstacle to route planning, seconds. */
+  standAfter: 1,
+  /** Radius of the disc a standing hauler stamps on the planning grid, metres. */
+  standRadius: 1.6,
+  /** Route planning ignores standing haulers this close to its start and goal, metres. */
+  standExempt: 2.6,
+  /** At most one replan per hauler this often, seconds; and look this far ahead for standing haulers. */
+  replanEvery: 1,
+  replanLook: 12,
 };
 
 /** Hauler parking at the hub, sized for the rover (about 1.8 × 1.2 m). */
 export const PARKING = {
   /** Bays in the painted row in front of the hub. */
   front: 7,
-  spacing: 1.7,
+  spacing: 2.0,
   /** Distance of the bay row's centre line from the hub's front, metres. */
   rowZ: 1.25,
   /** Bays down each side of the hub, and their distance from its side. */
   side: 5,
   sideX: 1.3,
-  /** Parking: stop this far out from the bay and this far to one side, then
-   *  reverse in along a quarter circle of this radius. */
+  /** Parking: stop this far straight out from the bay, turn on the spot to
+   *  face away from it, and reverse in. Metres. */
   approach: 2.6,
-  /** Straight run along the row before the stopping point, metres. */
-  runIn: 3,
+  /** Every other bay stops this much further out, so neighbours can turn at once. */
+  stagger: 1.7,
 };
 
 /** Hauler eye expressions (view-side; seconds). */

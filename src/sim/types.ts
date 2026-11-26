@@ -82,13 +82,22 @@ export interface Hauler {
   hold: number;
   /** Total distance driven, metres (stats, tests). */
   odo: number;
-  /** Ticks spent held up by other haulers while wanting to move. */
+  /** Ticks spent stopped while wanting to move. */
   wait: number;
-  /** Ticks left of squeezing past others after a long wait. */
+  /** Ticks standing still (for others: standing haulers are planned round). */
+  still: number;
+  /** Ticks left of squeezing past others, the last resort; and how many times it has. */
   squeeze: number;
-  /** Closest it has come to the end of its path, and when (tick). */
-  best: number;
-  bestT: number;
+  squeezes: number;
+  /** Curvature it is driving at (1/m, + is left). */
+  curv: number;
+  /** Tick of its last replan round a standing hauler. */
+  replanAt: number;
+  /** Ticks spent close to the end of its path without getting there. */
+  nearT: number;
+  /** Least remaining path length so far, and the tick it was reached (manoeuvre loops). */
+  bestLeft: number;
+  bestLeftT: number;
 }
 
 export interface Job {

@@ -2,7 +2,7 @@
 // adds cost. A* with string-pulling gives straight-line paths.
 
 import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
-import { NAV, PARKING, SCENERY } from '../data/tunables';
+import { DRIVE, HAULER, NAV, PARKING, SCENERY } from '../data/tunables';
 import { aabb, inflate, toLocal, toWorld, type OBB } from './geom';
 import { bodyOBB, buildingBody, buildingDock, dockPoint, lowerName, queryIndex } from './build';
 import { cellTravelCost, MIN_TRAVEL_COST, type Ground } from './ground';
@@ -16,6 +16,9 @@ export interface NavGrid {
   fixed: Uint8Array;
   /** Cells whose centre is inside a tree or boulder (not inflated): solid to a hauler's centre. */
   scen: Uint8Array;
+  /** Haulers standing still, by id, redone every tick (drive.ts); planned round. */
+  stand: Int32Array;
+  standCells: number[];
   /** Number of footprints covering each cell. */
   occ: Uint16Array;
   /** Cost multiplier per cell, ≥ 1. */
@@ -40,7 +43,7 @@ export function createNav(sim: Sim): NavGrid {
       cost[k] = 1 + s * NAV.slopeCost;
     }
   }
-  const nav: NavGrid = { size: n, fixed, scen: new Uint8Array(n * n), occ: new Uint16Array(n * n), cost, comp: new Int32Array(n * n), compDirty: true, version: 0 };
+  const nav: NavGrid = { size: n, fixed, scen: new Uint8Array(n * n), stand: new Int32Array(n * n), standCells: [], occ: new Uint16Array(n * n), cost, comp: new Int32Array(n * n), compDirty: true, version: 0 };
   const gone = new Set(sim.state.cleared);
   t.scenery.forEach((s, k) => {
     if (!gone.has(k)) stampDisc(nav, s.x, s.z, s.r, 1);
@@ -51,7 +54,7 @@ export function createNav(sim: Sim): NavGrid {
 /** Block (or free) the cells whose centres lie within a disc. */
 function stampDisc(nav: NavGrid, x: number, z: number, r: number, delta: number) {
   const n = nav.size;
-  const rr = r + 0.3;
+  const rr = r + NAV.sceneryClearance;
   let any = false;
   for (let j = Math.max(0, Math.floor(z - rr)); j <= Math.min(n - 1, Math.floor(z + rr)); j++) {
     for (let i = Math.max(0, Math.floor(x - rr)); i <= Math.min(n - 1, Math.floor(x + rr)); i++) {
@@ -94,12 +97,16 @@ export function clearScenery(sim: Sim, b: Building) {
 
 function rasterise(nav: NavGrid, o: OBB, delta: number) {
   const r = inflate(o, NAV.clearance);
-  const a = aabb(r);
+  // A band beyond the clearance costs a little more, so routes keep a body's
+  // width from walls where there is room.
+  const band = inflate(o, NAV.clearance + NAV.bandWidth);
+  const a = aabb(band);
   const n = nav.size;
   for (let j = Math.max(0, Math.floor(a.z0)); j <= Math.min(n - 1, Math.floor(a.z1)); j++) {
     for (let i = Math.max(0, Math.floor(a.x0)); i <= Math.min(n - 1, Math.floor(a.x1)); i++) {
       const [lx, lz] = toLocal(r.cx, r.cz, r.rot, i + 0.5, j + 0.5);
       if (Math.abs(lx) <= r.hx && Math.abs(lz) <= r.hz) nav.occ[j * n + i] += delta;
+      else if (Math.abs(lx) <= band.hx && Math.abs(lz) <= band.hz) nav.cost[j * n + i] += delta * NAV.bandCost;
     }
   }
   nav.compDirty = true;
@@ -109,6 +116,21 @@ function rasterise(nav: NavGrid, o: OBB, delta: number) {
 export function navAddBuilding(sim: Sim, b: Building) {
   rasterise(sim.d.nav, buildingBody(b), 1);
   if (b.type === 'hub') stampParking(sim.d.nav, b, 1);
+  else stampApron(sim.d.nav, b, 1);
+}
+
+/** Through-traffic should keep off other buildings' docks, where haulers stand and reverse. */
+function stampApron(nav: NavGrid, b: Building, delta: number) {
+  const d = buildingDock(b);
+  if (!d) return;
+  const a = aabb(d);
+  const n = nav.size;
+  for (let j = Math.max(0, Math.floor(a.z0)); j <= Math.min(n - 1, Math.floor(a.z1)); j++) {
+    for (let i = Math.max(0, Math.floor(a.x0)); i <= Math.min(n - 1, Math.floor(a.x1)); i++) {
+      const [lx, lz] = toLocal(d.cx, d.cz, d.rot, i + 0.5, j + 0.5);
+      if (Math.abs(lx) <= d.hx && Math.abs(lz) <= d.hz) nav.cost[j * n + i] += delta * NAV.apronCost;
+    }
+  }
 }
 
 /** Through-traffic should not drive across the hub's parking rows: make them costly. */
@@ -143,6 +165,7 @@ function stampParking(nav: NavGrid, hub: Building, delta: number) {
 export function navRemoveBuilding(sim: Sim, b: Building) {
   rasterise(sim.d.nav, buildingBody(b), -1);
   if (b.type === 'hub') stampParking(sim.d.nav, b, -1);
+  else stampApron(sim.d.nav, b, -1);
 }
 
 export function blocked(nav: NavGrid, i: number, j: number): boolean {
@@ -185,26 +208,6 @@ export function solidAt(sim: Sim, x: number, z: number, pad = NAV.solidPad): boo
     if (Math.abs(lx) < o.hx && Math.abs(lz) < o.hz) return true;
   }
   return false;
-}
-
-/**
- * If (x, z) is inside a building's footprint plus `pad`, the nearest point on
- * that margin's edge (so a hauler slides along the wall); otherwise (x, z).
- */
-export function pushOutOfBuildings(sim: Sim, x: number, z: number, pad = NAV.solidPad): [number, number] {
-  const probe: OBB = { cx: x, cz: z, hx: 0.01, hz: 0.01, rot: 0 };
-  for (const id of queryIndex(sim.d.index, probe)) {
-    const b = sim.d.byId.get(id)!;
-    const o = inflate(buildingBody(b), pad);
-    const [lx, lz] = toLocal(o.cx, o.cz, o.rot, x, z);
-    if (Math.abs(lx) >= o.hx || Math.abs(lz) >= o.hz) continue;
-    let ox = lx;
-    let oz = lz;
-    if (o.hx - Math.abs(lx) < o.hz - Math.abs(lz)) ox = Math.sign(lx || 1) * (o.hx + 1e-3);
-    else oz = Math.sign(lz || 1) * (o.hz + 1e-3);
-    return toWorld(o.cx, o.cz, o.rot, ox, oz);
-  }
-  return [x, z];
 }
 
 export function blockedAt(nav: NavGrid, x: number, z: number): boolean {
@@ -385,7 +388,7 @@ function cellCost(nav: NavGrid, g: Ground | null, k: number): number {
   return (g ? cellTravelCost(g, k) : 1) + nav.cost[k] - 1;
 }
 
-export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: number, ground: Ground | null = null): number[] | null {
+export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: number, ground: Ground | null = null, avoidStanding = false): number[] | null {
   const n = nav.size;
   const comp = components(nav);
   const sk = sj * n + si;
@@ -423,6 +426,11 @@ export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: numb
       const ni = i + di;
       const nj = j + dj;
       if (blocked(nav, ni, nj)) continue;
+      // Haulers standing still are in the way, except near either end.
+      if (avoidStanding && nav.stand[nj * n + ni]) {
+        const ex = DRIVE.standExempt;
+        if ((ni - si) * (ni - si) + (nj - sj) * (nj - sj) > ex * ex && (ni - gi) * (ni - gi) + (nj - gj) * (nj - gj) > ex * ex) continue;
+      }
       // No corner cutting.
       if (di !== 0 && dj !== 0 && (blocked(nav, i + di, j) || blocked(nav, i, j + dj))) continue;
       const nk = nj * n + ni;
@@ -441,6 +449,24 @@ export function astar(nav: NavGrid, si: number, sj: number, gi: number, gj: numb
   for (let k = gk; k !== -1; k = s.parent[k]) cells.push(k);
   cells.reverse();
   return cells;
+}
+
+/** Does the line a-b cross a standing hauler's disc (away from the route's two ends)? */
+function crossesStanding(nav: NavGrid, ax: number, az: number, bx: number, bz: number, sx: number, sz: number, tx: number, tz: number): boolean {
+  if (nav.standCells.length === 0) return false;
+  const n = nav.size;
+  const len = Math.hypot(bx - ax, bz - az);
+  const steps = Math.max(1, Math.ceil(len / 0.4));
+  const ex = DRIVE.standExempt;
+  for (let q = 0; q <= steps; q++) {
+    const x = ax + ((bx - ax) * q) / steps;
+    const z = az + ((bz - az) * q) / steps;
+    if (Math.hypot(x - sx, z - sz) < ex || Math.hypot(x - tx, z - tz) < ex) continue;
+    const i = Math.floor(x);
+    const j = Math.floor(z);
+    if (i >= 0 && j >= 0 && i < n && j < n && nav.stand[j * n + i]) return true;
+  }
+  return false;
 }
 
 /** Can a bot drive straight from a to b, keeping some clearance? */
@@ -485,7 +511,13 @@ export function findPath(sim: Sim, sx: number, sz: number, tx: number, tz: numbe
   const g = nearestFree(nav, Math.floor(tx), Math.floor(tz));
   if (!s || !g) return null;
   const ground = sim.state.ground;
-  const cells = astar(nav, s[0], s[1], g[0], g[1], ground);
+  // Round haulers standing in the way if possible; through them if not.
+  let round = true;
+  let cells = astar(nav, s[0], s[1], g[0], g[1], ground, true);
+  if (!cells) {
+    round = false;
+    cells = astar(nav, s[0], s[1], g[0], g[1], ground);
+  }
   if (!cells) return null;
   const n = nav.size;
   const pts: [number, number][] = cells.map((k) => [(k % n) + 0.5, Math.floor(k / n) + 0.5]);
@@ -505,6 +537,7 @@ export function findPath(sim: Sim, sx: number, sz: number, tx: number, tz: numbe
     for (let k = a + 2; k < pts.length; k++) {
       const [bx, bz] = pts[k];
       if (!lineClear(nav, ax, az, bx, bz) || lineCost(nav, ground, ax, az, bx, bz) > (cum[k] - cum[a]) * 1.05 + 0.5) break;
+      if (round && crossesStanding(nav, ax, az, bx, bz, sx, sz, tx, tz)) break;
       b = k;
     }
     out.push(pts[b][0], pts[b][1]);
@@ -512,5 +545,72 @@ export function findPath(sim: Sim, sx: number, sz: number, tx: number, tz: numbe
   }
   // Already there: still a one-point path, so arrival is handled as usual.
   if (out.length === 0) out.push(tx, tz);
+  return roundCorners(nav, sx, sz, out);
+}
+
+/**
+ * Replace each corner of a path with an arc no tighter than a hauler can
+ * drive, where there is room for it. `pts` excludes the start (sx, sz).
+ */
+export function roundCorners(nav: NavGrid, sx: number, sz: number, pts: number[]): number[] {
+  const all = [sx, sz, ...pts];
+  const n = all.length / 2;
+  if (n < 3) return pts;
+  const R = HAULER.minTurnRadius * 1.15;
+  const out: number[] = [];
+  for (let k = 1; k < n; k++) {
+    const bx = all[k * 2];
+    const bz = all[k * 2 + 1];
+    if (k === n - 1) {
+      out.push(bx, bz);
+      break;
+    }
+    const ax = all[k * 2 - 2];
+    const az = all[k * 2 - 1];
+    const cx = all[k * 2 + 2];
+    const cz = all[k * 2 + 3];
+    const l1 = Math.hypot(bx - ax, bz - az);
+    const l2 = Math.hypot(cx - bx, cz - bz);
+    const h1 = Math.atan2(bx - ax, bz - az);
+    const h2 = Math.atan2(cx - bx, cz - bz);
+    const turn = angleDiffN(h2, h1);
+    if (Math.abs(turn) < 0.12 || l1 < 0.2 || l2 < 0.2) {
+      out.push(bx, bz);
+      continue;
+    }
+    // Tangent points either side of the corner, no further than half of
+    // either leg, so neighbouring arcs don't overlap.
+    let d = R * Math.tan(Math.abs(turn) / 2);
+    d = Math.min(d, l1 * 0.45, l2 * 0.45);
+    const r = d / Math.tan(Math.abs(turn) / 2);
+    const tx1 = bx - ((bx - ax) / l1) * d;
+    const tz1 = bz - ((bz - az) / l1) * d;
+    const steps = Math.max(2, Math.ceil(Math.abs(turn) / 0.35));
+    const arc: number[] = [tx1, tz1];
+    // Walk the arc: heading turns from h1 to h2 over length r·|turn|.
+    let x = tx1;
+    let z = tz1;
+    let th = h1;
+    const ds = (r * Math.abs(turn)) / steps;
+    // Integrate along the chord directions of each sub-step for accuracy.
+    for (let s = 0; s < steps; s++) {
+      const mid = th + turn / steps / 2;
+      x += Math.sin(mid) * ds * (2 * Math.sin(Math.abs(turn) / steps / 2)) / (Math.abs(turn) / steps);
+      z += Math.cos(mid) * ds * (2 * Math.sin(Math.abs(turn) / steps / 2)) / (Math.abs(turn) / steps);
+      th += turn / steps;
+      arc.push(x, z);
+    }
+    let ok = true;
+    for (let q = 0; q < arc.length; q += 2) if (blockedAt(nav, arc[q], arc[q + 1])) ok = false;
+    if (ok) out.push(...arc);
+    else out.push(bx, bz);
+  }
   return out;
+}
+
+function angleDiffN(a: number, b: number): number {
+  let d = (a - b) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
 }

@@ -136,7 +136,8 @@ describe('M3: congestion', () => {
       peak = Math.max(peak, g.crowd[114 * g.size + gapX]);
     }
     expect(slow / inGap).toBeGreaterThan(0.3);
-    expect(peak).toBeGreaterThan(2);
+    // Solid haulers can't pack as densely as overlapping ones did.
+    expect(peak).toBeGreaterThan(1.2);
     // Backing off, re-planning and, last of all, squeezing past keep it moving.
     expect(stall).toBeLessThan(45 * 30);
     expect(checkReservations(sim)).toEqual([]);

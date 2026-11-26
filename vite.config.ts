@@ -5,5 +5,7 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',
+    // Scenario tests run minutes of game time.
+    testTimeout: 60000,
   },
 });

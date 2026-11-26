@@ -100,7 +100,7 @@ Done when: a busy route visibly becomes a road within a few minutes and fades
 after its buildings are removed; a narrow gap between buildings visibly jams.
 
 ## M3.5 — Traffic that flows
-**Status:** not started
+**Status:** in progress. Encounters pass and are tests; timers gone. Throughput and stop/shunt shares not yet met (see `notes.md`).
 
 Review of hauler movement after M3 and the move to solid, wheeled haulers.
 Driving alone is good: a single hauler never stalls. Meeting another hauler

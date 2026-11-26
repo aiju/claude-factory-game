@@ -8,7 +8,18 @@ line or two.
 Decisions taken where the docs were silent, departures from anything marked
 *suggested*, and tunables changed from the design doc's starting values.
 
-- **Haulers are solid** (Emily: "they drive through buildings and other haulers sometimes"):
+- **Traffic rewrite to the architecture doc's three layers** (`src/sim/drive.ts`, numbers in `DRIVE`). The old avoidance, its back-off and patience timers, and `AVOID` are gone. (M3.5)
+  - Layer 1: standing haulers are stamped as 1.6 m discs onto a per-tick overlay. Routes go round them, and string-pulling now respects the overlay too; before, it pulled routes straight back through. A moving hauler that sees one on its route ahead replans, at most once a second.
+  - Layer 2: every tick, 11 curvatures, forward and back, each swept with the real 1.8 × 1.2 m outline. With someone to give way to, each arc is also judged at about a third of the speed, braking included, so it can slow and pass behind instead of swerving.
+  - Layer 3: priority is narrow, then loaded, then lower id. Only same-way traffic (within about 25°) uses leader and follower, and which one leads is judged along their shared direction, so exactly one of a pair leads. The 45° crossing used to lock the two side by side. The one with right of way keeps clear of where the other is now, for as far as it takes to stop.
+  - Haulers already touching may move apart or along, never further in. The old rule ignored each other once touching, which let them drive through.
+  - Kerbside docks: a non-hub building has one lane. The hauler pulls up alongside it after a 4 m straight run-in, from whichever end costs least in distance plus turning, and the corner onto the run-in is rounded. Making every dock one-way was tried and was worse (30 parts against 36).
+  - Leaving with the way behind: if there is room, the hauler pulls forward and loops round instead of a three-point turn. It loops the long way if the short side is a wall.
+  - Parking is back to pivot-and-reverse, as approved at the M2 review: stop 2.6 m straight out from the bay (every other bay 4.3 m, so neighbours can turn at the same time), turn on the spot to face out, back straight in. The quarter-circle reverse kept circling.
+  - Trees and rocks are padded by 0.7 m on the nav grid (was 0.3). Routes threaded 1 m gaps between a tree and a building, and haulers wedged in them. A hauler stuck 2 s may clip ground cells for 0.75 m to get out.
+  - Loop guard: no headway along the path for 6 s means turn on the spot to face the way. A hauler that keeps missing the end of a leg replans after 5 s, and after 10 s within 2.2 m counts as arrived.
+  - Results are in "Questions for design review". Encounters all pass and are now tests (`tests/encounters.test.ts`); throughput does not meet the target.
+- **Haulers are solid** (Emily: "they drive through buildings and other haulers sometimes"). Back-off, patience and dock-queue rules below were replaced in M3.5:
   - Buildings, trees and cliffs: a hauler's centre never enters a footprint plus 0.6 m. A step that would is pushed back to the edge, so it slides along the wall.
   - Other haulers: a step that would bring two outlines (1.8 × 1.2 m) into contact is refused. Collisions are checked against where the other is and where it is heading this tick, and also when turning on the spot.
   - When stuck behind another hauler, it backs off: after 1 s if the other is standing still, after 3 s if both are moving and it is the higher-numbered one.
@@ -73,6 +84,13 @@ Decisions taken where the docs were silent, departures from anything marked
 Taste-heavy or foundational questions. State the provisional choice you went
 with so work is not blocked.
 
+- **M3.5 acceptance: movement passes, throughput doesn't.** The M2 chain is chaotic: the same run with initial headings nudged by a thousandth of a radian gives anywhere from 16 to 44 parts. So these numbers are means over 8 runs (4 for twelve haulers), not single runs.
+  - `npm run encounters`: all 12 cases arrive with no squeezes, all within 1.5× of driving alone (three against three 1.8×, limit 2×). Met.
+  - Six haulers on the M2 chain: 33 parts in 10 minutes (target about 50; 30 before M3.5); stopped 11% (target < 5%); shunting 13% (target < 8%); worst stall 12 s (target ≤ 10 s). Not met.
+  - Twelve haulers make 32 parts against 33 for six: about level, where before it was fewer. Their worst stall is up to 71 s, in one run, around the hub.
+  - Where the time goes: a lone hauler is at speed two thirds of the time and barely shunts. With six, the stops and shunts are near docks. About half are leaving one: kerbside docks put the hauler parallel to the building, the next destination is often behind it, and with others about there is rarely room to loop round. The four production docks of the M2 chain are within about 15 m of each other.
+  - I think the remaining gap is mostly dock layout rather than driving rules. Candidates for a design call: docks with two lanes, or a drive-through lane with room to pull out; queueing at a holding point (architecture doc, layer 1; not done yet); or accepting that busy docks are what links (M4) are for.
+
 - **Docks are now the bottleneck**, and adding haulers makes it worse. That is arguably the game working: a busy dock is what links are for (M4). But the cheapest improvement would be docking the way trucks do: reversing onto the dock, so they leave forwards without a three-point turn in front of the queue. (M2.5)
 - **Docks and turning**: haulers arrive at a dock facing the building and mostly have to back out. Real yards have trucks reverse onto the dock instead, which would read well and save a shunt on the way out. Worth doing? (M2.5)
 - **Is the road too loud?** Packed gravel in the palette's `road` grey is the darkest large area on screen once a route is busy (see `m3-roads`). A lighter, browner road would sit back more. (M3)
@@ -88,7 +106,8 @@ with so work is not blocked.
 
 Things that work but are not good yet.
 
-- In heavy jams, rovers squeeze through each other after 4 s (see the questions above). (M3)
+- In heavy jams, rovers still squeeze through each other after 10 s stopped with others about, for 2 s. It is rare on the M2 chain (under 0.5% of road time with six) but visible in the 30-hauler gap jam. (M3.5)
+- Haulers queueing for a dock wait on the road behind the one working it, not at a holding point beside the apron. (M3.5)
 - Haulers queueing at a busy dock for more than 1.5 s also look frustrated; it is the same "held up by others" signal as a jam. (M2.5)
 - Bots steering round each other can still clip the corner of a building's clearance zone (not the building itself). (M3)
 - No way to select a hauler or see its job; the info bar only counts busy haulers. (M2)
