@@ -67,6 +67,10 @@ function loadScenario(name: string) {
   Object.assign(camRig.goal, start);
 }
 hud.onScenario = loadScenario;
+if (scenario === 'faces') {
+  const order = ['neutral', 'sleepy', 'excited', 'frustrated'] as const;
+  game.sim.state.haulers.forEach((h, i) => view.haulers.forcedFaces.set(h.id, order[i % 4]));
+}
 hud.setScenario(scenario ?? '');
 if (params.has('paused')) hud.setSpeed(0);
 

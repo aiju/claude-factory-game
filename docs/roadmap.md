@@ -73,8 +73,9 @@ above", roofs, ground paint, terrain, hauler shape and eyes): re-read
 rover haulers with static eyes, all four buildings, lighting, vegetated
 ground, rocky deposits, trees and boulders (solid in the sim, cleared by
 building), particle smoke, a `showroom` scenario and `show-*` screenshots.
-Still open: eye expressions (2), ambient occlusion. Done by the implementer
-with M3: nav radius, dock lanes and parking spacing for the larger hauler (2),
+Still open: ambient occlusion, and the style guide's remaining eye expressions.
+Done by the implementer: eye expressions per Emily (neutral with blinks,
+sleepy, excited, frustrated; see `notes.md`). With M3: nav radius, dock lanes and parking spacing for the larger hauler (2),
 and hub tidying (6, trip mix reported in `notes.md`).
 
 Answers to the other M2 questions: keep six starting haulers and do not tune

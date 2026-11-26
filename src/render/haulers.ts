@@ -10,6 +10,7 @@ import { Instancer } from './instancer';
 import { ITEM_STACK_HEIGHT } from './items';
 import { Builder, glowMaterial, kitMaterial, plateGeo } from './kit';
 import { PALETTE } from './palette';
+import { EXPRESSIONS, expressionFor, newFaceMemory, type Expression, type FaceMemory } from './expressions';
 import type { WorldView } from './world-view';
 
 interface Snap {
@@ -32,7 +33,7 @@ interface Motion {
 
 const HEAD = new THREE.Matrix4().makeRotationX(-0.62).setPosition(0, 1.08, 0.6);
 
-function haulerGeometry(): { body: THREE.BufferGeometry; glass: THREE.BufferGeometry; eyes: THREE.BufferGeometry } {
+function haulerGeometry(): { body: THREE.BufferGeometry; glass: THREE.BufferGeometry } {
   const c = new Builder();
   const R = Math.PI / 2;
   // Running gear: three wheels a side on a bogie beam.
@@ -84,11 +85,58 @@ function haulerGeometry(): { body: THREE.BufferGeometry; glass: THREE.BufferGeom
 
   const glass = new Builder();
   glass.at(HEAD, () => glass.geo('glass', plateGeo(0.66, 0.34, 0.03, 0.02), 0, 0, 0.212));
-  const eyes = new Builder();
-  eyes.at(HEAD, () => {
-    for (const x of [-0.15, 0.15]) eyes.geo('eye', plateGeo(0.13, 0.2, 0.055, 0.012), x, 0, 0.226);
+  return { body: c.geometry(), glass: glass.geometry() };
+}
+
+// Eyes: one geometry per expression, both eyes in each, on the visor.
+// Looking at the face, local +x is the viewer's left.
+const EYE_X = 0.15;
+const EYE_Z = 0.226;
+const STROKE = 0.04;
+
+/** A bar from (ax, ay) to (bx, by) on the visor. */
+function stroke(b: Builder, ax: number, ay: number, bx: number, by: number) {
+  const len = Math.hypot(bx - ax, by - ay) + STROKE * 0.7;
+  b.geo('eye', plateGeo(len, STROKE, STROKE * 0.45, 0.012), (ax + bx) / 2, (ay + by) / 2, EYE_Z, { rotZ: Math.atan2(by - ay, bx - ax) });
+}
+
+/** A chevron centred at (cx, cy) whose point aims along (dx, dy). */
+function chevron(b: Builder, cx: number, cy: number, dx: number, dy: number, size: number) {
+  const px = -dy;
+  const py = dx;
+  const ax = cx + (dx * size) / 2;
+  const ay = cy + (dy * size) / 2;
+  for (const s of [-1, 1]) stroke(b, cx - (dx * size) / 2 + px * s * size * 0.62, cy - (dy * size) / 2 + py * s * size * 0.62, ax, ay);
+}
+
+function eyeGeometry(ex: Expression): THREE.BufferGeometry {
+  const b = new Builder();
+  b.at(HEAD, () => {
+    for (const side of [-1, 1]) {
+      const x = side * EYE_X;
+      switch (ex) {
+        case 'neutral':
+          b.geo('eye', plateGeo(0.13, 0.2, 0.055, 0.012), x, 0, EYE_Z);
+          break;
+        case 'blink':
+          stroke(b, x - 0.065, -0.01, x + 0.065, -0.01);
+          break;
+        case 'sleepy':
+          // _ _: low, flat, a little wider.
+          stroke(b, x - 0.07, -0.06, x + 0.07, -0.06);
+          break;
+        case 'excited':
+          // ^ ^
+          chevron(b, x, 0.0, 0, 1, 0.12);
+          break;
+        case 'frustrated':
+          // > < as the viewer sees it: each points in towards the middle.
+          chevron(b, x, 0, -side, 0, 0.12);
+          break;
+      }
+    }
   });
-  return { body: c.geometry(), glass: glass.geometry(), eyes: eyes.geometry() };
+  return b.geometry();
 }
 
 /** Top of the cargo deck, and its middle. */
@@ -107,7 +155,10 @@ const VISUAL_SCALE = new THREE.Vector3(1, 1, 1);
 export class HaulerView {
   private body: Instancer;
   private glass: Instancer;
-  private eyes: Instancer;
+  private eyes = new Map<Expression, Instancer>();
+  private faces = new Map<number, FaceMemory>();
+  /** Debug: pin a hauler's face (still lifes for screenshots). */
+  readonly forcedFaces = new Map<number, Expression>();
   private prev = new Map<number, Snap>();
   private motion = new Map<number, Motion>();
   private time = 0;
@@ -120,13 +171,25 @@ export class HaulerView {
     this.body = new Instancer(g.body, kitMaterial(), parent, 32);
     const glassMat = new THREE.MeshStandardMaterial({ color: PALETTE.glass, roughness: 0.25, metalness: 0 });
     this.glass = new Instancer(g.glass, glassMat, parent, 32, false);
-    this.eyes = new Instancer(g.eyes, glowMaterial('eye', 'eye', 1.6), parent, 32, false);
+    const awake = glowMaterial('eye', 'eye', 1.6);
+    const dozing = glowMaterial('eye', 'eye', 0.7);
+    for (const ex of EXPRESSIONS) {
+      this.eyes.set(ex, new Instancer(eyeGeometry(ex), ex === 'sleepy' ? dozing : awake, parent, ex === 'neutral' ? 32 : 8, false));
+    }
   }
 
   setSim(sim: Sim) {
     this.sim = sim;
     this.prev.clear();
     this.motion.clear();
+    this.faces.clear();
+  }
+
+  /** The face a hauler is showing right now (for tests and debugging). */
+  face(id: number): Expression | null {
+    const h = this.sim.state.haulers.find((x) => x.id === id);
+    const mem = this.faces.get(id);
+    return h && mem ? expressionFor(h, mem, this.time) : null;
   }
 
   /** Call before each sim tick, so rendering can interpolate. */
@@ -147,7 +210,7 @@ export class HaulerView {
     const t = this.sim.d.terrain;
     this.body.begin();
     this.glass.begin();
-    this.eyes.begin();
+    for (const ins of this.eyes.values()) ins.begin();
     for (const h of this.sim.state.haulers) {
       const p = this.prev.get(h.id) ?? h;
       const x = p.x + (h.x - p.x) * alpha;
@@ -181,7 +244,10 @@ export class HaulerView {
       m4.compose(v3, q, VISUAL_SCALE);
       this.body.add(m4);
       this.glass.add(m4);
-      this.eyes.add(m4);
+      let mem = this.faces.get(h.id);
+      if (!mem) this.faces.set(h.id, (mem = newFaceMemory(h, this.time)));
+      const ex = expressionFor(h, mem, this.time);
+      this.eyes.get(this.forcedFaces.get(h.id) ?? ex)!.add(m4);
       if (h.cargo && h.cargoN > 0) {
         const inst = world.itemInstancer(h.cargo);
         const hgt = ITEM_STACK_HEIGHT[h.cargo];
@@ -197,6 +263,6 @@ export class HaulerView {
     }
     this.body.end();
     this.glass.end();
-    this.eyes.end();
+    for (const ins of this.eyes.values()) ins.end();
   }
 }

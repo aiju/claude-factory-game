@@ -33,6 +33,8 @@ const SHOTS = [
   { name: 'm2-factory', scenario: 'm2', ticks: 5400, cam: { x: 140, z: 122, dist: 85, yaw: -25, pitch: 50 } },
   { name: 'm2-close', scenario: 'm2', ticks: 5400, cam: { x: 140, z: 118, dist: 40, yaw: -35, pitch: 42 } },
   { name: 'm2-hub', scenario: 'm2', ticks: 5400, cam: { x: 128, z: 134, dist: 30, yaw: -20, pitch: 45 } },
+  { name: 'faces', scenario: 'faces', cam: { x: 143.3, z: 140.5, dist: 15, yaw: 160, pitch: 38 } },
+  { name: 'faces-far', scenario: 'faces', cam: { x: 143.3, z: 140.5, dist: 40, yaw: 160, pitch: 50 } },
   { name: 'm3-roads', scenario: 'm2', ticks: 18000, cam: { x: 135, z: 120, dist: 110, yaw: -25, pitch: 55 } },
   { name: 'm3-roads-close', scenario: 'm2', ticks: 18000, cam: { x: 140, z: 116, dist: 45, yaw: -30, pitch: 50 } },
   { name: 'm3-traffic', scenario: 'm2', ticks: 18000, traffic: true, cam: { x: 135, z: 120, dist: 110, yaw: -25, pitch: 55 } },

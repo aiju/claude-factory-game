@@ -31,6 +31,8 @@ export const SCENARIOS: Record<string, () => Command[]> = {
   ],
   /** As m2 but with two haulers, to show starving and blocking. */
   'm2-small': () => SCENARIOS.m2(),
+  /** Hauler faces, one of each, lined up for a close look (see main.ts). */
+  faces: () => [],
   /** M3: the M2 chain, run for ten minutes, then everything demolished (roads fading). */
   'm3-fade': () => SCENARIOS.m2(),
   /**
@@ -64,6 +66,12 @@ export function runScenario(game: Game, name: string) {
     else if (r.id) ids.push(r.id);
   }
   if (name === 'm1' || name === 'showroom') for (const id of ids) game.command({ type: 'debugFill', id });
+  if (name === 'faces') {
+    game.sim.state.haulers.slice(0, 4).forEach((h, i) => {
+      Object.assign(h, { x: 140 + i * 2.2, z: 140, heading: (200 - i * 8) * D, mode: 'home', path: [], hold: 0 });
+    });
+    game.sim.state.haulers.length = 4;
+  }
   if (name === 'm3-fade') {
     game.warp(30 * 600);
     for (const id of ids) game.command({ type: 'demolish', id });

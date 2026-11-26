@@ -154,3 +154,18 @@ export const PARKING = {
   /** Drive to this far out from the bay, then reverse in. */
   approach: 2.6,
 };
+
+/** Hauler eye expressions (view-side; seconds). */
+export const FACE = {
+  /** Eyes go ^ ^ for this long when a parked hauler is given a job. */
+  excitedFor: 1.2,
+  /** Parked this long before the eyes close to _ _. */
+  dozeAfter: 1.5,
+  /** Held up by others this long before > <. */
+  frustratedAfter: 1.5,
+  /** Once frustrated, stay so at least this long (no flicker). */
+  frustratedHold: 1.0,
+  /** Neutral eyes blink now and then. */
+  blinkEvery: 4.5,
+  blinkFor: 0.13,
+};

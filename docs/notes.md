@@ -8,6 +8,13 @@ line or two.
 Decisions taken where the docs were silent, departures from anything marked
 *suggested*, and tunables changed from the design doc's starting values.
 
+- **Eye expressions**, the set Emily asked for (`src/render/expressions.ts`, numbers in `FACE`):
+  - neutral `▮ ▮` while driving, with a short blink every 3–6 s per hauler;
+  - excited `^ ^` for 1.2 s when a parked hauler gets a job;
+  - sleepy `_ _` (dimmed) once parked for 1.5 s;
+  - frustrated `> <` once held up by other haulers for 1.5 s, or while squeezing past them, held for at least 1 s.
+
+  The style guide's other expressions (look into turns, look at the tray, squint on delivery, glance at a bot giving way, dim amber when a destination is unreachable) are not done. A scenario called `faces` lines up one of each for screenshots (`npm run shots -- faces`). (M2.5)
 - **Scenario menu and controls card** in the top-left panel (H toggles the card). A host page can set `window.__FACTORY__ = { scenario, edgeScroll }` before loading the bundle, since an embedded page has no query string; the playable page uses that, with edge-scroll off. (M3)
 - **Wear** (`src/sim/ground.ts`, numbers in `WEAR`): a passing hauler adds wear equal to the distance driven, spread over about 2.5 m across. Track at 10 (back to grass below 5), road at 34 (back to track below 20), capped at 60. Half-lives 150 / 210 / 300 s for grass / track / road. On the M2 chain, tracks show within a minute and road within 2–3 minutes; after the buildings go, road drops to track in about 9 minutes and is grass again after about 16. (M3)
 - **Ground state is saved**: wear, level and crowd are typed arrays in `WorldState.ground`, serialised as base64. Save version is now 3. (M3)
@@ -59,7 +66,7 @@ with so work is not blocked.
 Things that work but are not good yet.
 
 - In heavy jams, rovers squeeze through each other after 4 s (see the questions above). (M3)
-- Eye expressions (M2.5) are not done; "stuck in a jam: half-lidded" would now have something true to show. (M3)
+- Haulers queueing at a busy dock for more than 1.5 s also look frustrated; it is the same "held up by others" signal as a jam. (M2.5)
 - Bots steering round each other can still clip the corner of a building's clearance zone (not the building itself). (M3)
 - No way to select a hauler or see its job; the info bar only counts busy haulers. (M2)
 - Smoke puffs are plain grey spheres. (M2)
