@@ -97,3 +97,17 @@ button.on .key { color: #f3efe6; border-color: rgba(243, 239, 230, 0.4); }
   background: var(--text); color: #f3efe6; border-radius: 4px; padding: 5px 10px;
   opacity: 0; transition: opacity 0.3s; pointer-events: none;
 }
+
+.info { display: flex; align-items: center; gap: 0; }
+.info select {
+  font: inherit; color: var(--text); background: transparent;
+  border: 1px solid var(--border); border-radius: 4px; padding: 3px 4px;
+}
+.info button { margin-left: 6px; border-color: var(--border); padding: 2px 8px; }
+.help { top: 56px; left: 12px; width: 340px; padding: 10px 14px; }
+.help h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.help dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
+.help dt { color: var(--muted); }
+.help dd { margin: 0; }
+.help p { margin: 8px 0 0; color: var(--muted); line-height: 1.4; }
+[hidden] { display: none !important; }

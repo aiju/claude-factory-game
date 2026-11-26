@@ -57,6 +57,11 @@ export function recipeText(r: RecipeDef, b?: Building): string {
 export class Hud {
   private root = document.getElementById('ui')!;
   private info = el('div', 'panel info', this.root);
+  private infoText = el('span', '', this.info);
+  private help = el('div', 'panel help', this.root);
+  /** Called when the player picks a scenario from the menu. */
+  onScenario: (name: string) => void = () => {};
+  private scenarioSel!: HTMLSelectElement;
   private time = el('div', 'panel time', this.root);
   private bar = el('div', 'panel bar', this.root);
   private hint = el('div', 'hint', this.root);
@@ -77,6 +82,7 @@ export class Hud {
   ) {
     this.buildTime();
     this.buildBar();
+    this.buildInfo();
     this.side.addEventListener('click', (e) => this.onSideClick(e));
     tools.onChange = () => this.refreshTools();
     tools.onMessage = (t) => this.message(t);
@@ -101,6 +107,60 @@ export class Hud {
     if (s !== 0) this.resumeSpeed = s;
     this.game.speed = s;
     for (const b of this.time.querySelectorAll('button')) b.classList.toggle('on', Number(b.dataset.speed) === s);
+  }
+
+  private buildInfo() {
+    el('span', 'sep', this.info);
+    const sel = el('select', '', this.info);
+    sel.id = 'scenario';
+    sel.title = 'Start over with a scenario';
+    for (const [v, label] of [
+      ['', 'Empty map'],
+      ['m2', 'Mine chain'],
+      ['m3-gap', 'Narrow gap, 30 haulers'],
+      ['m1', 'One of each, filled by hand'],
+    ]) {
+      const o = el('option', '', sel);
+      o.value = v;
+      o.textContent = label;
+    }
+    sel.onchange = () => {
+      this.onScenario(sel.value);
+      sel.blur();
+    };
+    this.scenarioSel = sel;
+    const hb = el('button', '', this.info);
+    hb.textContent = '?';
+    hb.title = 'Controls (H)';
+    hb.onclick = () => this.toggleHelp();
+    this.help.innerHTML = `
+      <h3>Controls</h3>
+      <dl>
+        <dt>Pan</dt><dd>WASD, arrow keys or middle-drag</dd>
+        <dt>Zoom</dt><dd>Mouse wheel</dd>
+        <dt>Rotate</dt><dd>Q / E or right-drag</dd>
+        <dt>Build</dt><dd>1 extractor (on a deposit), 2 smelter, 3 fabricator</dd>
+        <dt>Rotate building</dt><dd>R or right-drag while placing; Shift places without snapping</dd>
+        <dt>Select</dt><dd>Click a building; Esc to clear</dd>
+        <dt>Demolish</dt><dd>X, then click</dd>
+        <dt>Traffic overlay</dt><dd>T</dd>
+        <dt>Speed</dt><dd>Space pauses; + and − change speed</dd>
+      </dl>
+      <p>Haulers carry everything by themselves. Busy routes wear into tracks, then roads.
+      Select the hub to add haulers.</p>`;
+    this.help.hidden = true;
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyH' && !e.ctrlKey && !e.metaKey && !e.altKey && (e.target as HTMLElement).tagName !== 'INPUT') this.toggleHelp();
+    });
+  }
+
+  toggleHelp(on = this.help.hidden) {
+    this.help.hidden = !on;
+  }
+
+  setScenario(name: string) {
+    if (this.scenarioSel) this.scenarioSel.value = name;
+    this.lastSide = '';
   }
 
   private buildTime() {
@@ -224,7 +284,7 @@ export class Hud {
     const busy = s.haulers.filter((h) => h.job !== null).length;
     const html = `<span class="mono">${clock}</span><span class="sep"></span>Haulers <span class="mono">${busy}/${total}</span> busy`;
     if (html !== this.lastInfo) {
-      this.info.innerHTML = html;
+      this.infoText.innerHTML = html;
       this.lastInfo = html;
     }
   }

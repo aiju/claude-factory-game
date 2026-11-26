@@ -8,6 +8,7 @@ line or two.
 Decisions taken where the docs were silent, departures from anything marked
 *suggested*, and tunables changed from the design doc's starting values.
 
+- **Scenario menu and controls card** in the top-left panel (H toggles the card). A host page can set `window.__FACTORY__ = { scenario, edgeScroll }` before loading the bundle, since an embedded page has no query string; the playable page uses that, with edge-scroll off. (M3)
 - **Wear** (`src/sim/ground.ts`, numbers in `WEAR`): a passing hauler adds wear equal to the distance driven, spread over about 2.5 m across. Track at 10 (back to grass below 5), road at 34 (back to track below 20), capped at 60. Half-lives 150 / 210 / 300 s for grass / track / road. On the M2 chain, tracks show within a minute and road within 2–3 minutes; after the buildings go, road drops to track in about 9 minutes and is grass again after about 16. (M3)
 - **Ground state is saved**: wear, level and crowd are typed arrays in `WorldState.ground`, serialised as base64. Save version is now 3. (M3)
 - **Path cost per metre** = 1 / road speed (1, 1.25, 1.6) + 3 × crowd above comfortable + slope term. The A* heuristic is scaled by 1/1.6 so it stays admissible; string-pulling uses the same costs, so smoothing doesn't pull a path off a road. (M3)

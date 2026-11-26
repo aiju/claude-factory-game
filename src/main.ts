@@ -3,6 +3,7 @@ import { CAMERA } from './data/camera';
 import { MAP } from './data/map';
 import { runScenario } from './debug/scenarios';
 import { Game } from './game';
+import { createSim } from './sim/world';
 import { CameraControls } from './input/camera-controls';
 import { Tools } from './input/tools';
 import { CameraRig, type CamPose } from './render/camera-rig';
@@ -16,8 +17,11 @@ import { Hud } from './ui/hud';
 const app = document.getElementById('app')!;
 const params = new URLSearchParams(location.search);
 
+/** Set by a host page that embeds the game (no query string there). */
+const embed = (window as unknown as { __FACTORY__?: { scenario?: string; edgeScroll?: boolean } }).__FACTORY__;
+
 const game = new Game();
-const scenario = params.get('scenario');
+const scenario = params.get('scenario') ?? embed?.scenario ?? null;
 if (scenario) runScenario(game, scenario);
 
 const rig = createSceneRig(app);
@@ -44,11 +48,26 @@ const camRig = new CameraRig(rig.camera, game.sim.d.terrain, start);
 const canvas = rig.renderer.domElement;
 let tools: Tools | null = null;
 const controls = new CameraControls(canvas, camRig, { toolWantsRightDrag: () => tools?.wantsRightDrag() ?? false });
-if (params.has('noedge')) controls.edgeScroll = false;
+if (params.has('noedge') || embed?.edgeScroll === false) controls.edgeScroll = false;
 tools = new Tools(canvas, game, camRig, view, ghost);
 const ground = new GroundView(game.sim, rig.scene);
 const hud = new Hud(game, tools, ghost, rig.camera, ground);
 if (params.has('traffic')) hud.toggleTraffic(true);
+
+/** Start over with a fresh map and a scenario ('' for an empty map). */
+function loadScenario(name: string) {
+  game.sim = createSim();
+  game.log = [];
+  if (name) runScenario(game, name);
+  view.setSim(game.sim);
+  ghost.setSim(game.sim);
+  ground.setSim(game.sim);
+  tools!.setTool({ kind: 'select' });
+  tools!.select(null);
+  Object.assign(camRig.goal, start);
+}
+hud.onScenario = loadScenario;
+hud.setScenario(scenario ?? '');
 if (params.has('paused')) hud.setSpeed(0);
 
 window.addEventListener('resize', () => rig.resize());
