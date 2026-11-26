@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "shots": "node scripts/shots.mjs"
+    "shots": "node scripts/shots.mjs",
+    "encounters": "tsx scripts/encounters.ts",
+    "traffic": "tsx scripts/traffic.ts"
   },
   "dependencies": {
     "three": "^0.187.0"

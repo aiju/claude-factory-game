@@ -89,8 +89,75 @@ anyway.
 
 - Track bot density per cell (smoothed over time). Speed falls off above a
   comfortable density; path cost rises with it.
-- Local avoidance keeps bots from overlapping. Head-on bots should resolve by
-  each keeping to one side.
+
+### Hauler movement and traffic (decided; replaces the first attempt)
+
+Haulers are solid, wheeled vehicles: they cannot turn tighter than their
+turning circle and cannot overlap each other or buildings. The first attempt
+steered round other haulers by nudging the pursuit angle and capping speed,
+then relied on timers (back off after 1 s, 3 s, 12 s; drive through after
+24 s) when that failed. It fails often: see `npm run encounters`. The
+structural reasons, which the replacement must remove rather than patch:
+
+- A steering nudge fights path-following, which pulls straight back to the
+  line. They settle at a sideways offset smaller than a hauler is wide, so a
+  hauler standing on the path is never passed, even on open ground.
+- Both parties to a meeting are slowed to a stop by the same rule, so nobody
+  goes first.
+- Conflicts are judged with 0.8 m discs and a 1.5 m "lane", against a body
+  1.2 m wide, so haulers that would pass cleanly are treated as blocked.
+- Standing haulers (loading, queueing, parked) are invisible to route
+  planning, and routes run straight across other buildings' docks, which is
+  exactly where haulers stand and reverse.
+
+The replacement has three layers, each doing one job:
+
+1. **Plan round what is standing.** A hauler that will stand for a second or
+   more (loading, unloading, queued, parked) is an obstacle to route planning,
+   stamped as a disc into a per-tick overlay on the nav grid. A moving hauler
+   that sees one on its path ahead replans at once (rate-limited), instead of
+   driving up to it. Other buildings' dock aprons carry a path cost, like the
+   hub's parking rows, so through-traffic keeps off them. Queueing haulers
+   wait at a holding point beside the apron, not in the approach.
+
+2. **Choose a driveable arc, every tick.** Replace the steering nudge, the
+   speed caps, the wall probes and the step-refusal with one mechanism. From
+   the current pose, consider a fan of curvatures within the turning circle
+   (about eleven) at a few speeds. Roll each forward for the distance needed
+   to stop plus a margin, sweeping the hauler's real outline (1.8 × 1.2 m plus
+   a small margin). Discard any that touches something solid or another
+   hauler's predicted outline (others move at constant speed along their
+   heading, or stand). Of the rest, take the one that ends nearest the
+   pursuit point further along the path, with a small preference for holding
+   the current curvature and, when someone is oncoming, for the right-hand
+   side. If no forward arc is free, stop; if still stopped after a moment,
+   consider reverse arcs the same way. Shunting is then just "the best arc
+   happens to be a reverse one", not a separate state with its own timers.
+   Turning on the spot remains only for a hauler boxed in on all sides.
+
+3. **Decide who goes first.** In any pair, one has priority: the one already
+   in a narrow place, else the loaded one, else the lower id. The other
+   treats the first's predicted path as solid with a wider margin; the first
+   ignores the other except for actual contact. Exactly one of them yields.
+
+Driving through another hauler (the squeeze) stays as the last resort but
+should be vanishingly rare, and is counted. Single-lane gaps where two cannot
+pass are the job of signals later; until then priority plus backing out along
+the path just driven is enough.
+
+Acceptance, all measured by scripts in the repo:
+
+- `npm run encounters`: every case arrives, none squeezes, none takes more
+  than 1.5× the time of driving alone (three against three: 2×).
+- `npm run traffic` on the M2 chain with six haulers: stopped under 5% of
+  road time, shunting under 8%, no stall over 10 s, and no fewer parts than
+  with haulers that could pass through each other (about 75 in 10 minutes).
+- Twelve haulers make at least as many parts as six.
+
+Secondary, same piece of code: routes are planned for a point and followed by
+a vehicle. Plan with clearance for the body (about 1 m from footprints), and
+round each corner of the smoothed path to the turning radius, so the path
+itself can be driven without cutting corners into walls.
 
 ### Dispatch (decided)
 

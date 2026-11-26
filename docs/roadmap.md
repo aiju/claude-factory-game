@@ -99,6 +99,28 @@ ground blend. Soft congestion and local avoidance. Traffic overlay.
 Done when: a busy route visibly becomes a road within a few minutes and fades
 after its buildings are removed; a narrow gap between buildings visibly jams.
 
+## M3.5 — Traffic that flows
+**Status:** not started
+
+Review of hauler movement after M3 and the move to solid, wheeled haulers.
+Driving alone is good: a single hauler never stalls. Meeting another hauler
+is the problem. On open ground with nothing else about (`npm run
+encounters`): a hauler standing on the path is never passed; two meeting
+head-on take nearly three times as long as driving alone and shunt nine
+times; three against three only get through by driving through each other.
+On the M2 chain with six haulers (`npm run traffic`), 20% of road time is
+spent stopped and 17% shunting, every stall has another hauler within 3 m,
+and each hauler covers a third less ground than one working alone. Twelve
+haulers make fewer parts than six.
+
+The cause is the approach, not its tuning, so this is a replacement of the
+avoidance and its timers, not another layer on top. The approach and the
+acceptance numbers are under "Hauler movement and traffic" in
+`architecture.md`.
+
+Done when: the acceptance numbers there are met, the encounter cases are
+tests, and the back-off and patience timers are gone.
+
 ## M4 — Hardening
 **Status:** not started
 

@@ -56,6 +56,8 @@ npm test             # headless sim tests (Vitest)
 npm run typecheck    # tsc, no emit
 npm run build        # typecheck + production build into dist/
 npm run shots        # screenshots into shots/ (all, or name some: npm run shots -- hub)
+npm run encounters   # hauler-meets-hauler cases on open ground, timed against driving alone
+npm run traffic      # how haulers spend road time in a scenario, and where they stall
 ```
 
 The screenshot script starts its own dev server on port 5199 and drives a
