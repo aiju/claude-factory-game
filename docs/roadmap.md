@@ -8,7 +8,7 @@ Until M6, building is free and instant, and a debug button adds haulers.
 ---
 
 ## M0 — A place to stand
-**Status:** not started
+**Status:** done
 
 Toolchain, frame loop with fixed-tick sim, the fixed map's terrain with
 deposits marked, RTS camera, lighting and fog per the style guide.
@@ -18,7 +18,7 @@ comfortably; a trivial sim test runs under `npm test`; `CLAUDE.md` lists the
 commands. A screenshot script if practical.
 
 ## M1 — Buildings that work
-**Status:** not started
+**Status:** done
 
 Content data for the starter set. Model kit and first-pass meshes for hub,
 extractor, smelter, fabricator. Placement tool with ghost, free rotation, soft
@@ -30,7 +30,7 @@ fill and block. Buffers can be filled by a debug action so a smelter can be
 seen working.
 
 ## M2 — Haulers
-**Status:** not started
+**Status:** done, awaiting design review (screenshots: `npm run shots -- m2-overview m2-factory m2-close m2-hub m2-starved`)
 
 Nav grid, pathfinding with smoothing, hauler movement with cargo, the
 dispatcher with reservations, hub storage, the dock-reachability rule.
