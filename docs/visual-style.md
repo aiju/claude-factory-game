@@ -7,10 +7,15 @@ good light. Clean, matte, slightly chunky. Everything is engineered and
 purposeful; nothing is a joke. The charm comes from small machines taking
 their small jobs seriously.
 
-**Charm through motion and manners, never through jokes.** No faces, no speech
-bubbles, no funny names, no wacky proportions. A hauler that brakes a little
-too eagerly, parks precisely in a row, and waits its turn at a tiny traffic
-light — that is the register.
+**The bots are the characters; the factory is the set.** Things that move
+around on their own have eyes and a little personality. Buildings, links and
+terrain do not: they stay straight-faced industrial hardware, which is what
+makes the bots read as inhabitants rather than as decoration.
+
+**Charm through eyes, motion and manners, never through jokes.** No mouths, no
+speech bubbles, no funny names, no wacky proportions. A hauler that glances at
+the bot it is giving way to, brakes a little too eagerly, parks precisely in a
+row and dozes off — that is the register.
 
 ## Rendering rules
 
@@ -94,12 +99,48 @@ Readable without opening a panel:
 ## Haulers
 
 - Small rounded wheeled bots, about 1.2 m long: graphite chassis, white shell,
-  orange stripe, a single lit visor strip at the front. Not a face.
+  orange stripe, and a dark glossy visor panel across the front.
 - Cargo rides visibly on a flat bed, stacked.
-- Motion carries the personality: slight suspension bob, a lean into turns, a
-  small forward dip when braking, a brief pause before pulling out into
-  traffic, neat reverse-parking in rows at the hub.
+- Motion carries half the personality: slight suspension bob, a lean into
+  turns, a small forward dip when braking, a brief pause before pulling out
+  into traffic, neat reverse-parking in rows at the hub.
 - Deliberately a little large relative to buildings, so they read from afar.
+
+### Eyes
+
+Two eyes, drawn as lit shapes on the visor — a display, not anatomy. Warm
+white (`#FFF4D6`), soft rounded rectangles a little taller than wide, set
+fairly wide apart. That is the whole face: no mouth, no brows, no pupils.
+
+Expression comes from only three things: the **shape** of the lit area (lids
+are just the shape being cropped), where the pair **looks** (both eyes slide
+together within the visor), and **blinking**. Keep it understated; a bot
+should look attentive by default, not excited.
+
+Every expression is tied to something true in the sim, so eyes are also a
+readout:
+
+| When | Eyes |
+|---|---|
+| Driving | Open; look slightly ahead into turns *before* the body turns |
+| Approaching pickup or drop | Look at the tray |
+| Given a job while idle | Widen briefly, then normal |
+| Delivered | A short happy squint (upward arcs), about half a second; not every time |
+| Giving way | Glance at the other bot, then back to the road |
+| Stuck in a jam for a while | Half-lidded, flat |
+| Straining (uphill, loaded) | Slightly narrowed |
+| Parked and idle | Slow blinks, then closed to thin lines: dozing |
+| Cannot reach destination | Dim amber, looking around |
+
+- Blink at irregular intervals; never two neighbouring bots in sync.
+- From far away the eyes are just two bright dots, which is enough to tell
+  front from back and to make a queue of bots look like a queue of *someones*.
+- *Suggested implementation:* a small expression atlas or shader on the visor
+  quad, driven by per-instance attributes (expression, gaze offset, blink
+  phase), so it stays cheap with hundreds of bots.
+
+Later self-moving machines (carts, ropeway buckets perhaps) may get the same
+eyes. Arms do not: they are part of a building.
 
 ## Links
 
@@ -134,3 +175,5 @@ Readable without opening a panel:
 - Do keep the ground readable: it is where traffic tells its story.
 - Don't add detail that doesn't carry information or character.
 - Don't use more than one accent colour on one object.
+- Don't give faces to anything that doesn't move around on its own.
+- Don't let expressions get big. If it would look at home in a cartoon, halve it.
