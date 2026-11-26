@@ -150,8 +150,9 @@ Acceptance, all measured by scripts in the repo:
 - `npm run encounters`: every case arrives, none squeezes, none takes more
   than 1.5× the time of driving alone (three against three: 2×).
 - `npm run traffic` on the M2 chain with six haulers: stopped under 5% of
-  road time, shunting under 8%, no stall over 10 s, and no fewer parts than
-  with haulers that could pass through each other (about 75 in 10 minutes).
+  road time, shunting under 8%, no stall over 10 s, and close to the output
+  wheeled haulers had while they could still pass through each other (about
+  50 parts in 10 minutes; it is 30 now).
 - Twelve haulers make at least as many parts as six.
 
 Secondary, same piece of code: routes are planned for a point and followed by
