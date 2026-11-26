@@ -1,6 +1,7 @@
 // Owns the sim and the fixed-tick clock. Game speed runs more ticks per frame.
 
 import { DT } from './data/tunables';
+import { exec, type Command, type CommandResult } from './sim/commands';
 import { createSim, step, type Sim } from './sim/world';
 
 export type Speed = 0 | 1 | 2 | 4;
@@ -36,6 +37,16 @@ export class Game {
     this.beforeTick?.();
     step(this.sim);
   }
+
+  /** Apply a command at the current tick boundary (works while paused). */
+  command(cmd: Command): CommandResult {
+    const res = exec(this.sim, cmd);
+    this.log.push({ tick: this.sim.state.tick, cmd });
+    return res;
+  }
+
+  /** Commands as applied, with their ticks: enough to replay a session. */
+  log: { tick: number; cmd: Command }[] = [];
 
   /** Run ticks as fast as possible (debug, screenshots). */
   warp(ticks: number) {

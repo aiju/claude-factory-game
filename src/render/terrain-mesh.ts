@@ -113,14 +113,14 @@ function createDepositScatter(t: Terrain): THREE.Group {
   const qt = new THREE.Quaternion();
   const e = new THREE.Euler();
   for (const d of t.map.deposits) {
-    const count = Math.round(d.r * d.r * 2.2);
+    const count = Math.round(d.r * d.r * 2.6);
     const list = byItem.get(d.item) ?? [];
     for (let i = 0; i < count; i++) {
       const a = rng.next() * Math.PI * 2;
       const rr = Math.sqrt(rng.next()) * d.r;
       const x = d.x + Math.cos(a) * rr;
       const z = d.z + Math.sin(a) * rr;
-      const s = rng.range(2.2, 5.0) * (1 - (rr / d.r) * 0.55);
+      const s = rng.range(1.4, 3.2) * (1 - (rr / d.r) * 0.5);
       e.set(rng.next() * 6, rng.next() * 6, rng.next() * 6);
       qt.setFromEuler(e);
       m.compose(new THREE.Vector3(x, heightAt(t, x, z) - 0.06 * s, z), qt, new THREE.Vector3(s, s * 0.8, s));

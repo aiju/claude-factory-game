@@ -50,7 +50,7 @@ try {
   for (const s of shots) {
     const page = await browser.newPage({ viewport: { width: W, height: H } });
     page.on('pageerror', (e) => console.error(`[${s.name}] page error:`, e.message));
-    page.on('console', (m) => { if (m.type() === 'error') console.error(`[${s.name}]`, m.text()); });
+    page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && !m.text().includes('THREE'))) console.error(`[${s.name}]`, m.text()); });
     const q = new URLSearchParams({ noedge: '1', paused: '1' });
     if (s.scenario) q.set('scenario', s.scenario);
     await page.goto(`http://localhost:${PORT}/?${q}`);
@@ -60,7 +60,7 @@ try {
       if (js) new Function('g', js)(g);
       if (ticks) g.game.warp(ticks);
       g.setCam({ x: cam.x, z: cam.z, dist: cam.dist, yaw: (cam.yaw * Math.PI) / 180, pitch: (cam.pitch * Math.PI) / 180 });
-      g.renderNow();
+      g.renderNow(4);
     }, { cam: s.cam, ticks: s.ticks ?? 0, js: process.env.SHOT_JS });
     await page.waitForTimeout(300);
     await page.evaluate(() => window.__game.renderNow());

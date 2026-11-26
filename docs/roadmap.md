@@ -18,7 +18,7 @@ comfortably; a trivial sim test runs under `npm test`; `CLAUDE.md` lists the
 commands. A screenshot script if practical.
 
 ## M1 — Buildings that work
-**Status:** not started
+**Status:** done
 
 Content data for the starter set. Model kit and first-pass meshes for hub,
 extractor, smelter, fabricator. Placement tool with ghost, free rotation, soft
