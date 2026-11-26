@@ -161,10 +161,11 @@ export const FACE = {
   excitedFor: 1.2,
   /** Parked this long before the eyes close to _ _. */
   dozeAfter: 1.5,
-  /** Held up by others this long before > <. */
+  /** Making less than `progress` metres of headway for this long gives > <. */
   frustratedAfter: 1.5,
+  progress: 0.75,
   /** Once frustrated, stay so at least this long (no flicker). */
-  frustratedHold: 1.0,
+  frustratedHold: 0.4,
   /** Neutral eyes blink now and then. */
   blinkEvery: 4.5,
   blinkFor: 0.13,

@@ -11,8 +11,8 @@ Decisions taken where the docs were silent, departures from anything marked
 - **Eye expressions**, the set Emily asked for (`src/render/expressions.ts`, numbers in `FACE`):
   - neutral `▮ ▮` while driving, with a short blink every 3–6 s per hauler;
   - excited `^ ^` for 1.2 s when a parked hauler gets a job;
-  - sleepy `_ _` (dimmed) once parked for 1.5 s;
-  - frustrated `> <` once held up by other haulers for 1.5 s, or while squeezing past them, held for at least 1 s.
+  - sleepy: half-open eyes (the open eye with a flat lid across the middle), dimmed, once parked for 1.5 s;
+  - frustrated `> <` once a hauler on the road has made less than 0.75 m of headway in 1.5 s (jam or queue), or while squeezing past others; held 0.4 s so it doesn't flicker. On the quiet M2 chain that is about 7% of hauler time, nearly all of it queueing at the single-lane extractor docks.
 
   The style guide's other expressions (look into turns, look at the tray, squint on delivery, glance at a bot giving way, dim amber when a destination is unreachable) are not done. A scenario called `faces` lines up one of each for screenshots (`npm run shots -- faces`). (M2.5)
 - **Scenario menu and controls card** in the top-left panel (H toggles the card). A host page can set `window.__FACTORY__ = { scenario, edgeScroll }` before loading the bundle, since an embedded page has no query string; the playable page uses that, with edge-scroll off. (M3)

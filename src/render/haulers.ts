@@ -109,6 +109,25 @@ function chevron(b: Builder, cx: number, cy: number, dx: number, dy: number, siz
   for (const s of [-1, 1]) stroke(b, cx - (dx * size) / 2 + px * s * size * 0.62, cy - (dy * size) / 2 + py * s * size * 0.62, ax, ay);
 }
 
+/** The lower half of an open eye: flat lid on top, rounded underneath. */
+function halfEye(w: number, h: number, r: number, thick: number): THREE.BufferGeometry {
+  const hw = w / 2;
+  const top = -0.005;
+  const bottom = -h / 2;
+  const sh = new THREE.Shape();
+  sh.moveTo(-hw, top);
+  sh.lineTo(hw, top);
+  sh.lineTo(hw, bottom + r);
+  sh.absarc(hw - r, bottom + r, r, 0, -Math.PI / 2, true);
+  sh.lineTo(-hw + r, bottom);
+  sh.absarc(-hw + r, bottom + r, r, -Math.PI / 2, -Math.PI, true);
+  sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: false, curveSegments: 6 });
+  g.translate(0, 0, -thick / 2);
+  g.deleteAttribute('uv');
+  return g;
+}
+
 function eyeGeometry(ex: Expression): THREE.BufferGeometry {
   const b = new Builder();
   b.at(HEAD, () => {
@@ -122,8 +141,8 @@ function eyeGeometry(ex: Expression): THREE.BufferGeometry {
           stroke(b, x - 0.065, -0.01, x + 0.065, -0.01);
           break;
         case 'sleepy':
-          // _ _: low, flat, a little wider.
-          stroke(b, x - 0.07, -0.06, x + 0.07, -0.06);
+          // Half open: the open eye with its top half lidded.
+          b.geo('eye', halfEye(0.13, 0.2, 0.055, 0.012), x, 0, EYE_Z);
           break;
         case 'excited':
           // ^ ^

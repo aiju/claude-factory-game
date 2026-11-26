@@ -16,10 +16,20 @@ export interface FaceMemory {
   idleSince: number;
   excitedUntil: number;
   frustratedUntil: number;
+  /** Odometer reading and time when it last made real progress. */
+  progressOdo: number;
+  progressAt: number;
 }
 
 export function newFaceMemory(h: Hauler, now: number): FaceMemory {
-  return { mode: h.mode, idleSince: h.mode === 'idle' ? now - FACE.dozeAfter : now, excitedUntil: 0, frustratedUntil: 0 };
+  return {
+    mode: h.mode,
+    idleSince: h.mode === 'idle' ? now - FACE.dozeAfter : now,
+    excitedUntil: 0,
+    frustratedUntil: 0,
+    progressOdo: h.odo,
+    progressAt: now,
+  };
 }
 
 /** `now` is game time in seconds; it must not run while paused. */
@@ -29,8 +39,15 @@ export function expressionFor(h: Hauler, mem: FaceMemory, now: number): Expressi
     if (h.mode === 'idle') mem.idleSince = now;
     mem.mode = h.mode;
   }
-  // Held up by other haulers, or squeezing past them.
-  if (h.wait > FACE.frustratedAfter * TICK_RATE || h.squeeze > 0) mem.frustratedUntil = now + FACE.frustratedHold;
+  // Stuck: on the road but getting nowhere (a jam, a queue), or squeezing
+  // past other haulers. Loading, parking and the pull-out pause don't count.
+  const driving = h.mode === 'pickup' || h.mode === 'drop' || h.mode === 'home';
+  if (!driving || h.hold > 0 || h.odo - mem.progressOdo > FACE.progress) {
+    mem.progressOdo = h.odo;
+    mem.progressAt = now;
+  }
+  const stuck = now - mem.progressAt > FACE.frustratedAfter;
+  if (stuck || h.wait > FACE.frustratedAfter * TICK_RATE || h.squeeze > 0) mem.frustratedUntil = now + FACE.frustratedHold;
   if (now < mem.frustratedUntil) return 'frustrated';
   if (now < mem.excitedUntil) return 'excited';
   if (h.mode === 'idle' && now - mem.idleSince >= FACE.dozeAfter) return 'sleepy';

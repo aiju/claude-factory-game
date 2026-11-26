@@ -46,10 +46,25 @@ describe('hauler faces', () => {
     for (const cmd of gapScenario(136, 3, 24)) exec(sim, cmd);
     const frustrated = new Map<number, number>();
     let ticks = 0;
-    watch(sim, 4 * 60 * TICK_RATE, (id, ex) => {
+    // Any hauler on the road that has covered under a metre in two seconds
+    // must be showing it.
+    const progress = new Map<number, [number, number]>();
+    let stuck = 0;
+    let stuckShown = 0;
+    watch(sim, 4 * 60 * TICK_RATE, (id, ex, now) => {
       if (ex === 'frustrated') frustrated.set(id, (frustrated.get(id) ?? 0) + 1);
       ticks++;
+      const h = sim.state.haulers.find((x) => x.id === id)!;
+      const p = progress.get(id);
+      const driving = h.mode === 'pickup' || h.mode === 'drop' || h.mode === 'home';
+      if (!p || !driving || h.hold > 0 || h.odo - p[0] > 0.75) progress.set(id, [h.odo, now]);
+      else if (now - p[1] > 2) {
+        stuck++;
+        if (ex === 'frustrated') stuckShown++;
+      }
     });
+    expect(stuck).toBeGreaterThan(100);
+    expect(stuckShown).toBe(stuck);
     expect(frustrated.size).toBeGreaterThan(3);
     // A jam, not a permanent state: well under half of all hauler-time.
     const total = [...frustrated.values()].reduce((a, b) => a + b, 0);
