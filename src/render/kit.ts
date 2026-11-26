@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PALETTE, type PaletteRole } from './palette';
 
 export interface PartOpts {
@@ -42,6 +42,64 @@ export function boxGeo(w: number, h: number, d: number, bevel = 0): THREE.Buffer
   return b > 0.005 ? new RoundedBoxGeometry(w, h, d, 2, b) : new THREE.BoxGeometry(w, h, d);
 }
 
+/** A closed outline with its corners rounded off by `r`. Points are [x, y], counter-clockwise. */
+export function roundedShape(pts: [number, number][], r: number): THREE.Shape {
+  const s = new THREE.Shape();
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const a = pts[(i + n - 1) % n];
+    const b = pts[(i + 1) % n];
+    const la = Math.hypot(a[0] - p[0], a[1] - p[1]);
+    const lb = Math.hypot(b[0] - p[0], b[1] - p[1]);
+    const ra = Math.min(r, la * 0.45);
+    const rb = Math.min(r, lb * 0.45);
+    const inX = p[0] + ((a[0] - p[0]) / la) * ra;
+    const inY = p[1] + ((a[1] - p[1]) / la) * ra;
+    const outX = p[0] + ((b[0] - p[0]) / lb) * rb;
+    const outY = p[1] + ((b[1] - p[1]) / lb) * rb;
+    if (i === 0) s.moveTo(inX, inY);
+    else s.lineTo(inX, inY);
+    s.quadraticCurveTo(p[0], p[1], outX, outY);
+  }
+  s.closePath();
+  return s;
+}
+
+/**
+ * A side profile extruded into a solid, with soft edges.
+ * axis 'x': points are [z, y], extruded across the width (X), centred.
+ * axis 'z': points are [x, y], extruded along the depth (Z), centred.
+ */
+export function profileGeo(pts: [number, number][], length: number, axis: 'x' | 'z', bevel = 0.06, corner = 0.08): THREE.BufferGeometry {
+  const b = Math.min(bevel, length / 2 - 0.001);
+  let g: THREE.BufferGeometry = new THREE.ExtrudeGeometry(roundedShape(pts, corner), {
+    depth: length - 2 * b,
+    bevelEnabled: b > 0.004,
+    bevelSize: b,
+    bevelThickness: b,
+    bevelOffset: -b,
+    bevelSegments: 2,
+    curveSegments: 5,
+  });
+  g.translate(0, 0, -(length - 2 * b) / 2);
+  if (axis === 'x') g.rotateY(-Math.PI / 2);
+  g.deleteAttribute('uv');
+  g = toCreasedNormals(g, 0.7);
+  return g;
+}
+
+/** A thin plate with rounded corners, lying in XY, facing +Z, centred. */
+export function plateGeo(w: number, h: number, r: number, thick: number): THREE.BufferGeometry {
+  const hw = w / 2, hh = h / 2;
+  const g = new THREE.ExtrudeGeometry(roundedShape([[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]], r), {
+    depth: thick, bevelEnabled: false, curveSegments: 6,
+  });
+  g.translate(0, 0, -thick / 2);
+  g.deleteAttribute('uv');
+  return g;
+}
+
 /** Collects static parts; build() returns one merged mesh. */
 export class Builder {
   private parts: THREE.BufferGeometry[] = [];
@@ -63,19 +121,31 @@ export class Builder {
     return this;
   }
 
-  geo(role: PaletteRole | number, g: THREE.BufferGeometry) {
+  geo(role: PaletteRole | number, g: THREE.BufferGeometry, x = 0, y = 0, z = 0, o: PartOpts = {}) {
+    place(g, x, y, z, o);
     this.parts.push(prep(g, role));
     return this;
   }
 
-  /** An open tray: thin base and four low rims. Base at y. */
-  tray(role: PaletteRole, w: number, d: number, x: number, y: number, z: number, rim = 0.18) {
-    const t = 0.06;
-    this.box(role, w, t, d, x, y, z, { bevel: 0.02 });
-    this.box(role, w, rim, t, x, y, z - d / 2 + t / 2, { bevel: 0.015 });
-    this.box(role, w, rim, t, x, y, z + d / 2 - t / 2, { bevel: 0.015 });
-    this.box(role, t, rim, d, x - w / 2 + t / 2, y, z, { bevel: 0.015 });
-    this.box(role, t, rim, d, x + w / 2 - t / 2, y, z, { bevel: 0.015 });
+  /** A side profile extruded into a solid; see profileGeo. */
+  profile(role: PaletteRole | number, pts: [number, number][], length: number, axis: 'x' | 'z', x: number, y: number, z: number, o: PartOpts & { corner?: number } = {}) {
+    const g = profileGeo(pts, length, axis, o.bevel ?? 0.06, o.corner ?? 0.08);
+    place(g, x, y, z, o);
+    this.parts.push(prep(g, role));
+    return this;
+  }
+
+  /**
+   * An open tray: dark floor, pale rims, and a coloured lip along the front
+   * (+Z) rim, where goods cross. Base at y.
+   */
+  tray(w: number, d: number, x: number, y: number, z: number, rim = 0.2, lip: PaletteRole | null = 'logistics') {
+    const t = 0.09;
+    this.box('trayFloor', w, 0.05, d, x, y, z, { bevel: 0.02 });
+    this.box('hull', w, rim, t, x, y, z - d / 2 + t / 2, { bevel: 0.03 });
+    this.box(lip ?? 'hull', w, rim, t, x, y, z + d / 2 - t / 2, { bevel: 0.03 });
+    this.box('hull', t, rim, d, x - w / 2 + t / 2, y, z, { bevel: 0.03 });
+    this.box('hull', t, rim, d, x + w / 2 - t / 2, y, z, { bevel: 0.03 });
     return this;
   }
 

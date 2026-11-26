@@ -8,7 +8,8 @@ import { heightAt } from '../sim/terrain';
 import type { Sim } from '../sim/world';
 import { Instancer } from './instancer';
 import { ITEM_STACK_HEIGHT } from './items';
-import { Builder, glowMaterial, kitMaterial } from './kit';
+import { Builder, glowMaterial, kitMaterial, plateGeo } from './kit';
+import { PALETTE } from './palette';
 import type { WorldView } from './world-view';
 
 interface Snap {
@@ -23,26 +24,62 @@ interface Motion {
   roll: number;
 }
 
-function haulerGeometry(): { body: THREE.BufferGeometry; visor: THREE.BufferGeometry } {
-  const c = new Builder();
-  for (const x of [-0.37, 0.37]) {
-    for (const z of [-0.38, 0.4]) {
-      const w = new THREE.CylinderGeometry(0.17, 0.17, 0.13, 12);
-      w.rotateZ(Math.PI / 2);
-      w.translate(x, 0.17, z);
-      c.geo('structure', w);
-    }
-  }
-  c.box('structure', 0.66, 0.2, 1.16, 0, 0.14, 0, { bevel: 0.06 });
-  c.box('structure', 0.7, 0.04, 0.6, 0, 0.34, -0.22, { bevel: 0.015 });
-  c.box('hull', 0.68, 0.38, 0.44, 0, 0.32, 0.34, { bevel: 0.11 });
-  c.box('logistics', 0.69, 0.06, 0.45, 0, 0.47, 0.34, { bevel: 0.02 });
-  const v = new Builder();
-  v.box('structure', 0.48, 0.07, 0.03, 0, 0.58, 0.565, { bevel: 0.01 });
-  return { body: c.geometry(), visor: v.geometry() };
+// Local frame: +Z forward, origin on the ground under the middle.
+// From above it reads as: wheels peeking out, a white cab with a raked visor
+// and two eyes, an orange hoop, then a dark bed framed by white rails.
+
+/** Tilt that lays a plate on the visor slope (its face pointing forward and up). */
+const VISOR_TILT = -Math.atan2(0.43, 0.44);
+const VISOR_MID = { y: 0.8, z: 0.735 };
+const VISOR_NORMAL = { y: Math.cos(-VISOR_TILT), z: Math.sin(-VISOR_TILT) };
+
+function onVisor(g: THREE.BufferGeometry, x: number, along: number, proud: number): THREE.BufferGeometry {
+  // `along` runs up the slope from its middle; `proud` lifts off the surface.
+  g.rotateX(VISOR_TILT);
+  const upY = Math.cos(VISOR_TILT), upZ = Math.sin(VISOR_TILT);
+  g.translate(x, VISOR_MID.y + upY * along + VISOR_NORMAL.y * proud, VISOR_MID.z + upZ * along + VISOR_NORMAL.z * proud);
+  return g;
 }
 
-const BED_Y = 0.38;
+function haulerGeometry(): { body: THREE.BufferGeometry; glass: THREE.BufferGeometry; eyes: THREE.BufferGeometry } {
+  const c = new Builder();
+  // Wheels, with pale hubs.
+  for (const x of [-0.52, 0.52]) {
+    for (const z of [-0.56, 0.56]) {
+      const w = new THREE.CylinderGeometry(0.25, 0.25, 0.22, 18);
+      w.rotateZ(Math.PI / 2);
+      c.geo('structure', w, x, 0.25, z);
+      const hub = new THREE.CylinderGeometry(0.11, 0.11, 0.24, 12);
+      hub.rotateZ(Math.PI / 2);
+      c.geo('hullSecondary', hub, x, 0.25, z);
+    }
+  }
+  // Chassis and bumpers.
+  c.box('structure', 0.86, 0.2, 1.8, 0, 0.18, 0, { bevel: 0.06 });
+  c.box('structure', 1.0, 0.13, 0.1, 0, 0.3, 0.93, { bevel: 0.04 });
+  // Cab: nose, visor slope, roof.
+  c.profile('hull', [[0.16, 0.34], [0.95, 0.34], [0.95, 0.58], [0.52, 1.02], [0.16, 1.02]], 1.06, 'x', 0, 0, 0, { bevel: 0.15, corner: 0.16 });
+  // A stripe over the cab, just behind the visor.
+  c.box('logistics', 1.09, 0.7, 0.11, 0, 0.345, 0.36, { bevel: 0.05 });
+  // Bed: dark floor, white rails on three sides.
+  c.box('trayFloor', 1.04, 0.08, 1.1, 0, 0.38, -0.42, { bevel: 0.02 });
+  c.box('hull', 0.1, 0.24, 1.12, -0.48, 0.4, -0.42, { bevel: 0.04 });
+  c.box('hull', 0.1, 0.24, 1.12, 0.48, 0.4, -0.42, { bevel: 0.04 });
+  c.box('hull', 1.06, 0.24, 0.1, 0, 0.4, -0.93, { bevel: 0.04 });
+  // Antenna with a small tip.
+  c.cyl('structure', 0.018, 0.022, 0.5, -0.4, 1.0, 0.3, { segs: 6 });
+  c.geo('logistics', new THREE.SphereGeometry(0.055, 10, 8), -0.4, 1.53, 0.3);
+
+  const glass = new Builder();
+  glass.geo('glass', onVisor(plateGeo(0.86, 0.5, 0.1, 0.03), 0, 0, 0.012));
+  const eyes = new Builder();
+  for (const x of [-0.2, 0.2]) eyes.geo('eye', onVisor(plateGeo(0.17, 0.26, 0.075, 0.012), x, 0.01, 0.034));
+  return { body: c.geometry(), glass: glass.geometry(), eyes: eyes.geometry() };
+}
+
+/** Top of the bed floor, and the middle of the bed. */
+const BED_Y = 0.46;
+const BED_Z = -0.42;
 
 const m4 = new THREE.Matrix4();
 const m4b = new THREE.Matrix4();
@@ -50,12 +87,13 @@ const q = new THREE.Quaternion();
 const e = new THREE.Euler(0, 0, 0, 'YXZ');
 const v3 = new THREE.Vector3();
 const one = new THREE.Vector3(1, 1, 1);
-/** Drawn a little large relative to buildings, so they read from afar. */
-const VISUAL_SCALE = new THREE.Vector3(1.3, 1.3, 1.3);
+/** The model is built at its drawn size, which is larger than the sim's nominal hauler. */
+const VISUAL_SCALE = new THREE.Vector3(1, 1, 1);
 
 export class HaulerView {
   private body: Instancer;
-  private visor: Instancer;
+  private glass: Instancer;
+  private eyes: Instancer;
   private prev = new Map<number, Snap>();
   private motion = new Map<number, Motion>();
   private time = 0;
@@ -66,8 +104,9 @@ export class HaulerView {
   ) {
     const g = haulerGeometry();
     this.body = new Instancer(g.body, kitMaterial(), parent, 32);
-    const visorMat = glowMaterial('roadMark', 'roadMark', 0.9);
-    this.visor = new Instancer(g.visor, visorMat, parent, 32, false);
+    const glassMat = new THREE.MeshStandardMaterial({ color: PALETTE.glass, roughness: 0.25, metalness: 0 });
+    this.glass = new Instancer(g.glass, glassMat, parent, 32, false);
+    this.eyes = new Instancer(g.eyes, glowMaterial('eye', 'eye', 1.0), parent, 32, false);
   }
 
   setSim(sim: Sim) {
@@ -93,7 +132,8 @@ export class HaulerView {
     this.time += dt;
     const t = this.sim.d.terrain;
     this.body.begin();
-    this.visor.begin();
+    this.glass.begin();
+    this.eyes.begin();
     for (const h of this.sim.state.haulers) {
       const p = this.prev.get(h.id) ?? h;
       const x = p.x + (h.x - p.x) * alpha;
@@ -126,14 +166,15 @@ export class HaulerView {
       q.setFromEuler(e);
       m4.compose(v3, q, VISUAL_SCALE);
       this.body.add(m4);
-      this.visor.add(m4);
+      this.glass.add(m4);
+      this.eyes.add(m4);
       if (h.cargo && h.cargoN > 0) {
         const inst = world.itemInstancer(h.cargo);
         const hgt = ITEM_STACK_HEIGHT[h.cargo];
         for (let k = 0; k < h.cargoN; k++) {
           const layer = Math.floor(k / 4);
           const c = k % 4;
-          v3.set(c % 2 === 0 ? -0.16 : 0.16, BED_Y + layer * hgt, -0.22 + (c < 2 ? -0.14 : 0.14));
+          v3.set(c % 2 === 0 ? -0.2 : 0.2, BED_Y + layer * hgt, BED_Z + (c < 2 ? -0.22 : 0.22));
           q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, (k * 0.7) % 0.6);
           m4b.compose(v3, q, one);
           inst.add(m4b.premultiply(m4));
@@ -141,6 +182,7 @@ export class HaulerView {
       }
     }
     this.body.end();
-    this.visor.end();
+    this.glass.end();
+    this.eyes.end();
   }
 }

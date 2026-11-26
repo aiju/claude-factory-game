@@ -14,8 +14,8 @@ export interface SceneRig {
   resize(): void;
 }
 
-// Sun at about 40° elevation, from the south-west-ish.
-const SUN_ELEVATION = (40 * Math.PI) / 180;
+// Sun at about 52° elevation, from the south-west-ish.
+const SUN_ELEVATION = (52 * Math.PI) / 180;
 const SUN_AZIMUTH = (-135 * Math.PI) / 180;
 
 function makeSky(): THREE.Mesh {
@@ -69,7 +69,7 @@ export function createSceneRig(container: HTMLElement): SceneRig {
 
   const camera = new THREE.PerspectiveCamera(30, 1, 1, 3000);
 
-  const hemi = new THREE.HemisphereLight(PALETTE.fillSky, PALETTE.fillGround, 1.05);
+  const hemi = new THREE.HemisphereLight(PALETTE.fillSky, PALETTE.fillGround, 2.2);
   scene.add(hemi);
 
   const sun = new THREE.DirectionalLight(PALETTE.sun, 2.9);

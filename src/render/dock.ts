@@ -78,29 +78,34 @@ export function buildDockMesh(t: Terrain, type: BuildingTypeId, x: number, z: nu
   const hw = def.dock.w / 2;
   const z0 = def.d / 2;
   const z1 = def.d / 2 + def.dock.d;
-  const s = 0.14; // stripe width
-  // Outline (the side touching the building is left open).
-  dr.rect(-hw, z0, -hw + s, z1, 'hazard');
-  dr.rect(hw - s, z0, hw, z1, 'hazard');
-  dr.rect(-hw + s, z1 - s, hw - s, z1, 'hazard');
-  // Chevrons along the outer edge, pointing at the building.
-  const cw = 0.8;
-  const pitch = 1.2;
-  const count = Math.max(1, Math.floor((def.dock.w - 0.5) / pitch));
+  // Quiet paint: thin off-white corner brackets, and a few small chevrons
+  // pointing at the building. Never louder than the building itself.
+  const s = 0.07;
+  const arm = Math.min(0.9, def.dock.w / 4);
+  for (const sx of [-1, 1]) {
+    const xo = sx * hw;
+    const xi = sx * (hw - s);
+    dr.rect(Math.min(xo, xi), z1 - arm, Math.max(xo, xi), z1, 'roadMark');
+    dr.rect(Math.min(xo, sx * (hw - arm)), z1 - s, Math.max(xo, sx * (hw - arm)), z1, 'roadMark');
+    dr.rect(Math.min(xo, xi), z0 + 0.15, Math.max(xo, xi), z0 + 0.15 + arm * 0.6, 'roadMark');
+  }
+  const cw = 0.46;
+  const pitch = 0.75;
+  const count = Math.min(3, Math.max(1, Math.floor((def.dock.w - 1.5) / pitch)));
   const span = (count - 1) * pitch;
-  const zc = z1 - 0.75;
-  const a = 0.2; // arm thickness along x
-  for (let k = 0; k < count; k++) {
+  const zc = z1 - 0.45;
+  const a = 0.1;
+  // A deep apron (the hub's) has no single approach line to point along.
+  for (let k = 0; k < (def.dock.d <= 4 ? count : 0); k++) {
     const cx = -span / 2 + k * pitch;
-    // Two arms of a chevron pointing at the building (-z).
-    dr.quad([cx - a / 2, zc - 0.25], [cx + a / 2, zc - 0.25], [cx + cw / 2 + a / 2, zc + 0.25], [cx + cw / 2 - a / 2, zc + 0.25], 'hazard');
-    dr.quad([cx - a / 2, zc - 0.25], [cx + a / 2, zc - 0.25], [cx - cw / 2 + a / 2, zc + 0.25], [cx - cw / 2 - a / 2, zc + 0.25], 'hazard');
+    dr.quad([cx - a / 2, zc - 0.15], [cx + a / 2, zc - 0.15], [cx + cw / 2 + a / 2, zc + 0.15], [cx + cw / 2 - a / 2, zc + 0.15], 'hazard');
+    dr.quad([cx - a / 2, zc - 0.15], [cx + a / 2, zc - 0.15], [cx - cw / 2 + a / 2, zc + 0.15], [cx - cw / 2 - a / 2, zc + 0.15], 'hazard');
   }
   if (type === 'hub') {
     // Parking bay lines along the front row.
     for (let k = 0; k <= 8; k++) {
       const lx = -5.6 + k * 1.4;
-      dr.rect(lx - 0.04, z0 + 0.2, lx + 0.04, z0 + 1.9, 'roadMark');
+      dr.rect(lx - 0.035, z0 + 0.2, lx + 0.035, z0 + 1.9, 'roadMark');
     }
   }
   return dr.build(material ?? paintMaterial());

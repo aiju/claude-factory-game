@@ -51,7 +51,9 @@ Nature is muted and slightly desaturated so that machines and items stand out.
 | Road | `#4A4E57` | edge and centre marks `#E8E4D8` |
 | Sky / fog | `#DCE6EA` → `#F3EFE6` | top to horizon |
 | Hull (building panels) | `#E9E6DF` | warm white; secondary `#C9CCD1` |
-| Structure (frames, pylons, wheels) | `#2E3238` | graphite |
+| Pad (under every building) | `#C6C2B8` | pale concrete; between ground and hull in brightness |
+| Structure (frames, pylons, wheels) | `#41464E` | graphite; any darker renders as a black hole |
+| Tray and bin floors | `#4C4F55` | dark enough for every item to stand out |
 | Logistics accent | `#F28C28` | haulers, conveyor trim, link UI |
 | Power accent | `#3CC8C8` | cables, generator trim, powered windows |
 | Hazard / construction | `#F2C230` | |
@@ -75,8 +77,8 @@ means power. Do not use them decoratively.
 ## Buildings
 
 - Chunky silhouettes that are distinct from each other at maximum zoom-out.
-  Each sits on a low graphite plinth, which also hides uneven ground. The
-  plinth is a thin skirt, barely wider than the building — never a slab.
+  Each sits on a low, pale concrete pad covering its footprint, which also
+  hides uneven ground. Dark is reserved for mechanisms, never for the base.
 - White hull, graphite structure. A second, slightly darker hull tone
   (`#C9CCD1`) breaks up large faces.
 - **The roof is the building's face.** Never a blank plane: it carries the
@@ -89,10 +91,10 @@ means power. Do not use them decoratively.
 
 | Building | Silhouette | Signature motion |
 |---|---|---|
-| Hub | Low, wide, a short mast | Slowly turning dish; hauler bays along the front |
-| Extractor | Squat tower over the deposit | Piston driving down and up |
-| Smelter | Box with a tall stack | Glowing mouth; round smoke puffs from the stack |
-| Fabricator | Long shed with a raised press housing | Press stamping |
+| Hub | Low, wide; control block with a mast; stock bins on the roof | Slowly turning dish; hauler bays along the front under an orange dock band |
+| Extractor | Squat four-legged tower over the deposit | Hammer driving down through the base; its rod and cap bob above the roof |
+| Smelter | Furnace body, tall pale stack with a dark top | Glowing grated crown on the roof and glowing mouth; round smoke puffs |
+| Fabricator | Sawtooth-roofed shed (the skylights are its windows) and an open press | Ram stamping between two uprights, visible either side of a narrow crosshead |
 | Generator | Drum on a frame | Spinning flywheel |
 | Pylon | Slim mast with a ring | Cyan ring lit when live |
 
@@ -131,8 +133,10 @@ Readable without opening a panel:
 
 ## Haulers
 
-- Small rounded wheeled bots: graphite chassis, white shell, orange stripe,
-  and a dark glossy visor panel across the front.
+- Small wheeled bots shaped like a toy flatbed: a rounded white cab at the
+  front, a thin orange hoop over it, an open bed behind with white rails,
+  chunky dark wheels peeking out at the sides, and a short antenna with an
+  orange tip. A dark glossy visor panel covers the cab's sloped front.
 - **From above, a hauler is mostly white with an orange stripe**; the dark
   chassis is only glimpsed at the wheels. The visor is raked well back
   (around 45°), like a windscreen, so the eyes face the camera.

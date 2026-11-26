@@ -15,7 +15,17 @@ export const PALETTE = {
   skyHorizon: 0xf3efe6,
   hull: 0xe9e6df,
   hullSecondary: 0xc9ccd1,
-  structure: 0x2e3238,
+  structure: 0x41464e,
+  /** Concrete pad under every building. Between ground and hull in brightness. */
+  pad: 0xc6c2b8,
+  /** Shaded interior seen through an open door. Dark, but never a void. */
+  bay: 0x7c8694,
+  /** Floor of a tray or bin: dark enough for every item to stand out on. */
+  trayFloor: 0x4c4f55,
+  /** A hauler's visor panel. */
+  glass: 0x14181d,
+  /** A hauler's eyes: light on the visor. */
+  eye: 0xfff4d6,
   logistics: 0xf28c28,
   power: 0x3cc8c8,
   hazard: 0xf2c230,
@@ -24,7 +34,7 @@ export const PALETTE = {
   /** Warm light from a furnace mouth. Light, not paint, so not an accent. */
   furnaceGlow: 0xffa860,
   /** Sun and fill light colours. */
-  sun: 0xfff1dc,
+  sun: 0xfffaf0,
   fillSky: 0xd6e4f0,
   fillGround: 0xa3a596,
 } as const;

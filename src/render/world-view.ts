@@ -83,7 +83,7 @@ export class WorldView {
 
   constructor(private sim: Sim) {
     for (const item of ITEM_IDS) this.items.set(item, new Instancer(makeItemGeometry(item), itemMaterial(item), this.group, 256));
-    const puffMat = new THREE.MeshStandardMaterial({ color: PALETTE.hullSecondary, roughness: 1 });
+    const puffMat = new THREE.MeshStandardMaterial({ color: PALETTE.hull, roughness: 1 });
     this.smoke = new Instancer(new THREE.IcosahedronGeometry(0.5, 1), puffMat, this.group, 64, false);
     this.haulers = new HaulerView(sim, this.group);
   }
@@ -257,7 +257,7 @@ export class WorldView {
     if (b.store) {
       ITEM_IDS.forEach((item, k) => {
         const s = b.store![item];
-        if (s && s.n > 0 && m.bins[k]) this.stack(m, m.bins[k], item, Math.min(12, s.n));
+        if (s && s.n > 0 && m.bins[k]) this.stack(m, m.bins[k], item, Math.min(BIN_SHOWN, s.n));
       });
       return;
     }
@@ -273,16 +273,19 @@ export class WorldView {
     });
   }
 
-  /** Lay out `n` items on a tray: 2×2 per layer, layers upward. */
+  /** Lay out `n` items on a tray: as many per layer as fit, layers upward. */
   private stack(m: BuildingModel, spot: TraySpot, item: ItemId, n: number, shift = 0) {
     const inst = this.items.get(item)!;
     const h = ITEM_STACK_HEIGHT[item];
+    const cols = Math.max(1, Math.floor((spot.w - 0.2) / STACK_PITCH));
+    const rows = Math.max(1, Math.floor((spot.d - 0.2) / STACK_PITCH));
+    const per = cols * rows;
     for (let k = 0; k < n; k++) {
-      const layer = Math.floor(k / 4);
-      const c = (k + shift) % 4;
-      const lx = spot.x + (c % 2 === 0 ? -1 : 1) * spot.w * 0.22;
-      const lz = spot.z + (c < 2 ? -1 : 1) * spot.d * 0.22;
-      const ly = spot.y + 0.06 + layer * h;
+      const layer = Math.floor(k / per);
+      const c = (k + shift) % per;
+      const lx = spot.x + ((c % cols) - (cols - 1) / 2) * STACK_PITCH;
+      const lz = spot.z + (Math.floor(c / cols) - (rows - 1) / 2) * STACK_PITCH;
+      const ly = spot.y + 0.05 + layer * h;
       const yaw = ((k * 2.399) % 1) * 0.5 - 0.25 + (layer % 2) * 0.3;
       tmpQ.setFromAxisAngle(UP, yaw);
       tmpV.set(lx, ly, lz);
@@ -293,5 +296,10 @@ export class WorldView {
     }
   }
 }
+
+/** Spacing of items laid out on a tray, metres. */
+const STACK_PITCH = 0.42;
+/** Most items drawn in one hub bin; beyond this it just looks full. */
+const BIN_SHOWN = 40;
 
 export { kitMaterial };

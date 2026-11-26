@@ -68,6 +68,12 @@ above", roofs, ground paint, terrain, hauler shape and eyes): re-read
    only when its tray is full or nothing consumes the item). Report how the
    M2 chain's trip mix and parts-per-10-minutes change.
 
+**Progress:** items 1–4 have had a first pass by the design lead, directly in
+`src/render/` (lighting, hauler model with static eyes, all four building
+models, pad instead of plinth, quiet dock paint, a `showroom` scenario and
+`show-*` screenshots). Still open: eye expressions (2), nav radius and
+parking spacing to match the larger hauler (2), cliffs (5), hub tidying (6).
+
 Answers to the other M2 questions: keep six starting haulers and do not tune
 pressure until roads exist (M3 changes the numbers); pivot-and-reverse
 parking is fine, no three-point turn; roof bins are the right way to show
