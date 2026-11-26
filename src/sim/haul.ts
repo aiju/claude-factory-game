@@ -455,7 +455,7 @@ function legEnd(h: Hauler): number {
 }
 
 /** Remaining length of the current leg from the hauler's position. */
-function remaining(h: Hauler): number {
+export function remaining(h: Hauler): number {
   let d = 0;
   let px = h.x;
   let pz = h.z;
@@ -474,7 +474,7 @@ function remaining(h: Hauler): number {
  * Pure-pursuit target: the nearest point on the segment being followed, then
  * `L` metres further along the path (clamped to the end of the leg).
  */
-function lookaheadPoint(h: Hauler, L: number): [number, number] {
+export function lookaheadPoint(h: Hauler, L: number): [number, number] {
   const end = legEnd(h);
   const i = Math.max(1, h.pathI);
   const ax = h.path[i * 2 - 2];

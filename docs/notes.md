@@ -8,6 +8,10 @@ line or two.
 Decisions taken where the docs were silent, departures from anything marked
 *suggested*, and tunables changed from the design doc's starting values.
 
+- **Heads turn** (`src/render/head.ts`, numbers in `HEAD`). The head is its own mesh on the neck, and eyes and visor turn with it.
+  - It looks into bends before the body turns (up to 40°), and at the building when within 4 m of its dock or while loading.
+  - It swivels 180° to face where it is going on a long reverse: at least 3 m of a parking leg left, or more than 1.2 s of reversing. It faces forward again once driving forward or parked. Never more than one turn round per 2 s.
+  - On the busy M2 chain that is about one turn round per hauler every two minutes; short shunts don't trigger it. (M2.5)
 - **Haulers drive like wheeled vehicles** (`drive()` in `src/sim/haul.ts`, numbers in `HAULER`), at Emily's request:
   - Heading changes only while moving, never tighter than a 1.8 m turning radius. Paths are followed by pure pursuit (lookahead 1.4 m plus 0.35 s of travel).
   - They slow for curves (4.5 m/s² sideways), and to 2 m/s through bends tighter than they can turn.

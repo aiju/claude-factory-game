@@ -185,3 +185,25 @@ export const FACE = {
   blinkEvery: 4.5,
   blinkFor: 0.13,
 };
+
+/** Where a hauler's head looks (view-side; seconds, metres, radians). */
+export const HEAD = {
+  /** Look this far along the path to see a bend coming. */
+  lookAhead: 3.5,
+  /** Furthest the head turns to look into a bend, or at a building. */
+  maxLook: 0.7,
+  maxLookAtBuilding: 1.1,
+  /** Look at the building once this close to its dock. */
+  buildingNear: 4,
+  /** Turn round to face backwards when this much reversing is left... */
+  reverseDistance: 3,
+  /** ...or after reversing this long. */
+  reverseTime: 1.2,
+  /** Face forward again after driving forward this long. */
+  forwardTime: 0.4,
+  /** At least this long between turning round and back. */
+  minFlip: 2,
+  /** Turning speed, rad/s, and smoothing rate, 1/s. */
+  speed: 5,
+  smoothing: 7,
+};

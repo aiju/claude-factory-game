@@ -10,6 +10,7 @@ import { Instancer } from './instancer';
 import { ITEM_STACK_HEIGHT } from './items';
 import { Builder, glowMaterial, kitMaterial, plateGeo } from './kit';
 import { PALETTE } from './palette';
+import { newHeadMemory, updateHead, type HeadMemory } from './head';
 import { EXPRESSIONS, expressionFor, newFaceMemory, type Expression, type FaceMemory } from './expressions';
 import type { WorldView } from './world-view';
 
@@ -33,7 +34,7 @@ interface Motion {
 
 const HEAD = new THREE.Matrix4().makeRotationX(-0.62).setPosition(0, 1.08, 0.6);
 
-function haulerGeometry(): { body: THREE.BufferGeometry; glass: THREE.BufferGeometry } {
+function haulerGeometry(): { body: THREE.BufferGeometry; head: THREE.BufferGeometry; glass: THREE.BufferGeometry } {
   const c = new Builder();
   const R = Math.PI / 2;
   // Running gear: three wheels a side on a bogie beam.
@@ -72,20 +73,21 @@ function haulerGeometry(): { body: THREE.BufferGeometry; glass: THREE.BufferGeom
   // Neck and a cable.
   c.cyl('hullDark', 0.07, 0.09, 0.2, 0, 0.8, 0.62, { segs: 10, metal: 0.7 });
   c.pipe('structure', [[0.2, 0.84, 0.46], [0.22, 1.0, 0.4], [0.16, 1.04, 0.5]], 0.02, { flanges: false });
-  // Head.
-  c.at(HEAD, () => {
-    c.box('hull', 0.78, 0.46, 0.38, 0, -0.23, 0, { c: 0.045 });
-    c.box('structure', 0.7, 0.38, 0.03, 0, -0.19, 0.19, { c: 0.01 });
-    c.box('hullDark', 0.82, 0.05, 0.16, 0, 0.21, 0.13, { c: 0.012 });
-    for (const sx of [-1, 1]) c.cyl('hullDark', 0.09, 0.09, 0.07, sx * 0.39 + 0.035, 0, 0, { rotZ: R, segs: 10, c: 0.015, metal: 0.7 });
-    for (const x of [-0.2, 0, 0.2]) c.box('structure', 0.12, 0.3, 0.03, x, -0.15, -0.195, { c: 0.008 });
-    c.beam('structure', [-0.3, 0.23, -0.1], [-0.34, 0.68, -0.14], 0.02, { round: true });
-    c.geo('logistics', new THREE.SphereGeometry(0.035, 8, 6), -0.34, 0.69, -0.14);
+  // Head: its own mesh, so it can turn on the neck.
+  const hd = new Builder();
+  hd.at(HEAD, () => {
+    hd.box('hull', 0.78, 0.46, 0.38, 0, -0.23, 0, { c: 0.045 });
+    hd.box('structure', 0.7, 0.38, 0.03, 0, -0.19, 0.19, { c: 0.01 });
+    hd.box('hullDark', 0.82, 0.05, 0.16, 0, 0.21, 0.13, { c: 0.012 });
+    for (const sx of [-1, 1]) hd.cyl('hullDark', 0.09, 0.09, 0.07, sx * 0.39 + 0.035, 0, 0, { rotZ: R, segs: 10, c: 0.015, metal: 0.7 });
+    for (const x of [-0.2, 0, 0.2]) hd.box('structure', 0.12, 0.3, 0.03, x, -0.15, -0.195, { c: 0.008 });
+    hd.beam('structure', [-0.3, 0.23, -0.1], [-0.34, 0.68, -0.14], 0.02, { round: true });
+    hd.geo('logistics', new THREE.SphereGeometry(0.035, 8, 6), -0.34, 0.69, -0.14);
   });
 
   const glass = new Builder();
   glass.at(HEAD, () => glass.geo('glass', plateGeo(0.66, 0.34, 0.03, 0.02), 0, 0, 0.212));
-  return { body: c.geometry(), glass: glass.geometry() };
+  return { body: c.geometry(), head: hd.geometry(), glass: glass.geometry() };
 }
 
 // Eyes: one geometry per expression, both eyes in each, on the visor.
@@ -162,6 +164,19 @@ function eyeGeometry(ex: Expression): THREE.BufferGeometry {
   return b.geometry();
 }
 
+/** The neck's vertical axis, in the hauler's frame. */
+const NECK_Z = 0.62;
+const neckM = new THREE.Matrix4();
+const neckT = new THREE.Matrix4();
+const mHead = new THREE.Matrix4();
+function neckTurn(yaw: number): THREE.Matrix4 {
+  neckM.makeTranslation(0, 0, NECK_Z);
+  neckT.makeRotationY(yaw);
+  neckM.multiply(neckT);
+  neckT.makeTranslation(0, 0, -NECK_Z);
+  return neckM.multiply(neckT);
+}
+
 /** Top of the cargo deck, and its middle. */
 const BED_Y = 0.6;
 const BED_Z = -0.3;
@@ -178,6 +193,8 @@ const VISUAL_SCALE = new THREE.Vector3(1, 1, 1);
 export class HaulerView {
   private body: Instancer;
   private glass: Instancer;
+  private head: Instancer;
+  private heads = new Map<number, HeadMemory>();
   private eyes = new Map<Expression, Instancer>();
   private faces = new Map<number, FaceMemory>();
   /** Debug: pin a hauler's face (still lifes for screenshots). */
@@ -194,6 +211,7 @@ export class HaulerView {
     this.body = new Instancer(g.body, kitMaterial(), parent, 32);
     const glassMat = new THREE.MeshStandardMaterial({ color: PALETTE.glass, roughness: 0.25, metalness: 0 });
     this.glass = new Instancer(g.glass, glassMat, parent, 32, false);
+    this.head = new Instancer(g.head, kitMaterial(), parent, 32);
     const awake = glowMaterial('eye', 'eye', 1.6);
     const dozing = glowMaterial('eye', 'eye', 0.7);
     for (const ex of EXPRESSIONS) {
@@ -206,6 +224,7 @@ export class HaulerView {
     this.prev.clear();
     this.motion.clear();
     this.faces.clear();
+    this.heads.clear();
   }
 
   /** The face a hauler is showing right now (for tests and debugging). */
@@ -233,6 +252,7 @@ export class HaulerView {
     const t = this.sim.d.terrain;
     this.body.begin();
     this.glass.begin();
+    this.head.begin();
     for (const ins of this.eyes.values()) ins.begin();
     for (const h of this.sim.state.haulers) {
       const p = this.prev.get(h.id) ?? h;
@@ -266,11 +286,17 @@ export class HaulerView {
       q.setFromEuler(e);
       m4.compose(v3, q, VISUAL_SCALE);
       this.body.add(m4);
-      this.glass.add(m4);
+      // The head turns on its neck; glass and eyes go with it.
+      let hm = this.heads.get(h.id);
+      if (!hm) this.heads.set(h.id, (hm = newHeadMemory()));
+      const yaw = updateHead(this.sim, h, hm, this.time, dt);
+      mHead.multiplyMatrices(m4, neckTurn(yaw));
+      this.head.add(mHead);
+      this.glass.add(mHead);
       let mem = this.faces.get(h.id);
       if (!mem) this.faces.set(h.id, (mem = newFaceMemory(h, this.time)));
       const ex = expressionFor(h, mem, this.time);
-      this.eyes.get(this.forcedFaces.get(h.id) ?? ex)!.add(m4);
+      this.eyes.get(this.forcedFaces.get(h.id) ?? ex)!.add(mHead);
       if (h.cargo && h.cargoN > 0) {
         const inst = world.itemInstancer(h.cargo);
         const hgt = ITEM_STACK_HEIGHT[h.cargo];
@@ -286,6 +312,7 @@ export class HaulerView {
     }
     this.body.end();
     this.glass.end();
+    this.head.end();
     for (const ins of this.eyes.values()) ins.end();
   }
 }

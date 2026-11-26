@@ -73,7 +73,10 @@ above", roofs, ground paint, terrain, hauler shape and eyes): re-read
 rover haulers with static eyes, all four buildings, lighting, vegetated
 ground, rocky deposits, trees and boulders (solid in the sim, cleared by
 building), particle smoke, a `showroom` scenario and `show-*` screenshots.
-Still open: ambient occlusion, and the style guide's remaining eye expressions.
+Still open: ambient occlusion, and the style guide's remaining eye expressions
+(squint on delivery, glance at a bot giving way, dim amber when lost). Heads now
+look into bends, at the building they are working with, and over the shoulder
+when reversing.
 Done by the implementer: eye expressions per Emily (neutral with blinks,
 sleepy, excited, frustrated; see `notes.md`). With M3: nav radius, dock lanes and parking spacing for the larger hauler (2),
 and hub tidying (6, trip mix reported in `notes.md`).
