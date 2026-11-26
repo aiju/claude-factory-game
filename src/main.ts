@@ -23,6 +23,7 @@ const rig = createSceneRig(app);
 rig.scene.add(createTerrainMesh(game.sim.d.terrain));
 const view = new WorldView(game.sim);
 rig.scene.add(view.group);
+game.beforeTick = () => view.haulers.snapshot();
 const ghost = new GhostView(game.sim);
 rig.scene.add(ghost.group);
 

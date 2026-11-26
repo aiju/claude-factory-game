@@ -4,7 +4,7 @@
 import { BUILDINGS, type BuildingTypeId } from '../data/buildings';
 import type { RecipeId } from '../data/recipes';
 import { indexAdd, indexRemove, validatePlacement } from './build';
-import { addHaulers, cancelJobsFor } from './haul';
+import { addHaulers, cancelJobsFor, repathBlocked } from './haul';
 import { navAddBuilding, navRemoveBuilding } from './nav';
 import { applyRecipe, pruneOutputs } from './prod';
 import type { Building } from './types';
@@ -61,6 +61,7 @@ export function exec(sim: Sim, cmd: Command): CommandResult {
       const recipe = cmd.recipe && def.recipes.includes(cmd.recipe) ? cmd.recipe : (def.recipes[0] ?? null);
       applyRecipe(b, recipe);
       addBuilding(sim, b);
+      repathBlocked(sim);
       return { ok: true, id: b.id };
     }
     case 'demolish': {

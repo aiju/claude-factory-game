@@ -30,7 +30,7 @@ fill and block. Buffers can be filled by a debug action so a smelter can be
 seen working.
 
 ## M2 — Haulers
-**Status:** not started
+**Status:** done, awaiting design review (screenshots: `npm run shots -- m2-overview m2-factory m2-close m2-hub m2-starved`)
 
 Nav grid, pathfinding with smoothing, hauler movement with cargo, the
 dispatcher with reservations, hub storage, the dock-reachability rule.

@@ -49,15 +49,15 @@ export const MAP: MapDef = {
   flats: [{ x: 128, z: 128, r: 22, falloff: 18 }],
   plateaus: [
     {
-      x: 196, z: 66, rx: 34, rz: 24, rot: 0.4, height: 7, cliff: 4,
+      x: 196, z: 66, rx: 34, rz: 24, rot: 0.4, height: 7, cliff: 6,
       ramp: { angle: Math.PI * 0.85, arc: 0.55, width: 30 },
     },
     {
-      x: 54, z: 206, rx: 28, rz: 22, rot: -0.3, height: 6, cliff: 3.6,
+      x: 54, z: 206, rx: 28, rz: 22, rot: -0.3, height: 6, cliff: 5.5,
       ramp: { angle: -Math.PI * 0.15, arc: 0.5, width: 28 },
     },
     {
-      x: 70, z: 60, rx: 16, rz: 34, rot: 0.9, height: 4.5, cliff: 3,
+      x: 70, z: 60, rx: 16, rz: 34, rot: 0.9, height: 4.5, cliff: 4.5,
       ramp: { angle: Math.PI * 0.35, arc: 0.6, width: 22 },
     },
   ],

@@ -16,8 +16,8 @@ export const SCENARIOS: Record<string, () => Command[]> = {
   ],
   /** M2: extractor → smelter → fabricator → hub, haulers only. */
   m2: () => [
-    { type: 'place', building: 'extractor', x: 152, z: 104, rot: 200 * D },
-    { type: 'place', building: 'extractor', x: 155, z: 109, rot: 210 * D },
+    { type: 'place', building: 'extractor', x: 152, z: 104, rot: -60 * D },
+    { type: 'place', building: 'extractor', x: 157, z: 107, rot: -20 * D },
     { type: 'place', building: 'smelter', x: 141, z: 112, rot: 150 * D },
     { type: 'place', building: 'smelter', x: 147, z: 119, rot: 180 * D },
     { type: 'place', building: 'fabricator', x: 112, z: 116, rot: 90 * D },

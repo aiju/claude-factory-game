@@ -26,7 +26,7 @@ export const PALETTE = {
   /** Sun and fill light colours. */
   sun: 0xfff1dc,
   fillSky: 0xd6e4f0,
-  fillGround: 0x8a8f80,
+  fillGround: 0xa3a596,
 } as const;
 
 export type PaletteRole = keyof typeof PALETTE;

@@ -22,6 +22,7 @@ const SHOTS = [
   { name: 'low-angle', cam: { x: 128, z: 128, dist: 120, yaw: 20, pitch: 35 } },
   { name: 'm1-buildings', scenario: 'm1', ticks: 600, cam: { x: 140, z: 118, dist: 55, yaw: -35, pitch: 45 } },
   { name: 'm1-close', scenario: 'm1', ticks: 600, cam: { x: 150, z: 106, dist: 28, yaw: -40, pitch: 40 } },
+  { name: 'm2-overview', scenario: 'm2', ticks: 5400, cam: { x: 135, z: 120, dist: 160, yaw: -25, pitch: 55 } },
   { name: 'm2-factory', scenario: 'm2', ticks: 5400, cam: { x: 140, z: 122, dist: 85, yaw: -25, pitch: 50 } },
   { name: 'm2-close', scenario: 'm2', ticks: 5400, cam: { x: 140, z: 118, dist: 40, yaw: -35, pitch: 42 } },
   { name: 'm2-hub', scenario: 'm2', ticks: 5400, cam: { x: 128, z: 134, dist: 30, yaw: -20, pitch: 45 } },
@@ -35,7 +36,7 @@ const W = Number(process.env.SHOT_W ?? 1600);
 const H = Number(process.env.SHOT_H ?? 1000);
 
 mkdirSync('shots', { recursive: true });
-const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(PORT), '--strictPort'], {
+const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(PORT), '--strictPort', '--bypass-lock'], {
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 await new Promise((resolve, reject) => {

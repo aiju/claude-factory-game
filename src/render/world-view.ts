@@ -10,6 +10,7 @@ import { buildDockMesh, buildOutline } from './dock';
 import { Instancer } from './instancer';
 import { ITEM_STACK_HEIGHT, itemMaterial, makeItemGeometry } from './items';
 import { kitMaterial } from './kit';
+import { HaulerView } from './haulers';
 import { buildModel, type BuildingModel, type TraySpot } from './models';
 import { PALETTE } from './palette';
 
@@ -72,6 +73,7 @@ export class WorldView {
   private templates = new Map<string, BuildingModel>();
   private items = new Map<ItemId, Instancer>();
   private smoke: Instancer;
+  readonly haulers: HaulerView;
   private time = 0;
   /** Building id under selection, for a highlight. */
   selected: number | null = null;
@@ -83,12 +85,14 @@ export class WorldView {
     for (const item of ITEM_IDS) this.items.set(item, new Instancer(makeItemGeometry(item), itemMaterial(item), this.group, 256));
     const puffMat = new THREE.MeshStandardMaterial({ color: PALETTE.hullSecondary, roughness: 1 });
     this.smoke = new Instancer(new THREE.IcosahedronGeometry(0.5, 1), puffMat, this.group, 64, false);
+    this.haulers = new HaulerView(sim, this.group);
   }
 
   setSim(sim: Sim) {
     for (const v of this.views.values()) this.removeView(v);
     this.views.clear();
     this.sim = sim;
+    this.haulers.setSim(sim);
   }
 
   pickableMeshes(): THREE.Object3D[] {
@@ -143,6 +147,7 @@ export class WorldView {
         this.views.delete(id);
       }
     }
+    this.haulers.update(alpha, dt, this);
     for (const it of this.items.values()) it.end();
     this.smoke.end();
     this.updateOutline();

@@ -69,10 +69,10 @@ export function createSceneRig(container: HTMLElement): SceneRig {
 
   const camera = new THREE.PerspectiveCamera(30, 1, 1, 3000);
 
-  const hemi = new THREE.HemisphereLight(PALETTE.fillSky, PALETTE.fillGround, 0.75);
+  const hemi = new THREE.HemisphereLight(PALETTE.fillSky, PALETTE.fillGround, 1.05);
   scene.add(hemi);
 
-  const sun = new THREE.DirectionalLight(PALETTE.sun, 3.2);
+  const sun = new THREE.DirectionalLight(PALETTE.sun, 2.9);
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.bias = -0.0004;
