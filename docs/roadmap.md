@@ -42,6 +42,41 @@ fleet is too small. Headless scenario test passes with no leaked reservations.
 **Design review after M2**: screenshots and a short play. This is the first
 point where the core loop can be judged, so expect tuning and visual notes.
 
+## M2.5 — Review pass
+**Status:** not started
+
+Outcome of the design review of M2. The loop works and the structure is
+sound; this pass is about the picture and one dispatch rule. The style guide
+was updated at the same time (lighting targets, "design for the view from
+above", roofs, ground paint, terrain, hauler shape and eyes): re-read
+`visual-style.md` in full first.
+
+1. **Light and exposure.** The scene is dim and olive: hull reads grey,
+   graphite clips to black, shadows are long and heavy. Hit the targets under
+   "Rendering rules".
+2. **Haulers.** Too small and too dark to follow. Rework per the style guide:
+   bigger, white-and-orange from above, raked visor, and the eyes (shape,
+   gaze, blink; at least driving, dozing, job-assigned and stuck).
+3. **Buildings.** Roofs are blank grey planes and plinths are black slabs.
+   Thin the plinths, give every roof its signature part and some form, drop
+   the orange band (orange on tray lips and dock edge only), light the hub
+   bays, enlarge the hub's roof bins.
+4. **Ground paint.** Aprons and parking are the loudest thing on screen.
+   Thin, off-white, small yellow chevrons only; shrink the hub apron.
+5. **Cliffs.** Still read as dark smears. Make them faces.
+6. **Hub tidying.** Adopt the rule now in `design.md` (take from a producer
+   only when its tray is full or nothing consumes the item). Report how the
+   M2 chain's trip mix and parts-per-10-minutes change.
+
+Answers to the other M2 questions: keep six starting haulers and do not tune
+pressure until roads exist (M3 changes the numbers); pivot-and-reverse
+parking is fine, no three-point turn; roof bins are the right way to show
+hub stock.
+
+Done when: the five M2 screenshots are regenerated and, at `m2-factory` zoom,
+you can tell at a glance which way each hauler faces and what it carries;
+nothing in frame is pure black or louder than the buildings; tests pass.
+
 ## M3 — The ground remembers
 **Status:** not started
 

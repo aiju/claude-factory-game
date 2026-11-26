@@ -22,9 +22,18 @@ row and dozes off — that is the register.
 - Procedural geometry, flat colours from the palette, no textures. Soft
   bevels on anything man-made so edges catch light.
 - Matte materials (roughness ≈ 0.8). A little sheen on metal items only.
-- One warm directional sun at about 40° elevation with soft shadows; a cool
+- One warm directional sun at about 50° elevation with soft shadows; a cool
   hemisphere fill. Neutral tone mapping. No outlines, no bloom except a
   restrained glow on lamps and furnace mouths.
+- **Bright, not overcast.** Check against these on a screenshot: sunlit hull
+  reads as warm white (around 90% brightness), not grey; sunlit ground matches
+  the palette sage rather than olive; shadowed ground is no darker than about
+  60% of lit ground; graphite never clips to black — a graphite object in
+  shade still shows its form. Shadows are short and soft-edged.
+- **Design for the view from above.** The camera looks down at 35–65°, so
+  roofs and top surfaces are most of what the player sees. Anything that
+  matters (signature part, trays, lamp, a bot's eyes) must face upwards
+  enough to be seen from there.
 - Light distance fog in the sky colour, to give depth and hide the map edge.
 - Camera: perspective with a narrow field of view (about 30°) for the
   miniature look. Pitch between 35° and 65°. Zoom from about 15 m to 200 m.
@@ -66,8 +75,15 @@ means power. Do not use them decoratively.
 ## Buildings
 
 - Chunky silhouettes that are distinct from each other at maximum zoom-out.
-  Each sits on a low graphite plinth, which also hides uneven ground.
-- White hull, graphite structure, one accent stripe.
+  Each sits on a low graphite plinth, which also hides uneven ground. The
+  plinth is a thin skirt, barely wider than the building — never a slab.
+- White hull, graphite structure. A second, slightly darker hull tone
+  (`#C9CCD1`) breaks up large faces.
+- **The roof is the building's face.** Never a blank plane: it carries the
+  signature part, and enough secondary form (a raised housing, vents, a
+  hatch, panel seams) to read as a machine rather than a box.
+- **No accent band around buildings.** Orange appears on a building only
+  where goods cross its boundary: the lip of each tray and the dock edge.
 - **Each building has one signature moving part**, and that part is also its
   status display: it moves when working and stops when not.
 
@@ -80,8 +96,25 @@ means power. Do not use them decoratively.
 | Generator | Drum on a frame | Spinning flywheel |
 | Pylon | Slim mast with a ring | Cyan ring lit when live |
 
-- Docks are a marked apron: a painted outline with hazard chevrons.
+- Docks are a marked apron, and ground paint is **quiet**: thin lines in the
+  road-mark off-white (`#E8E4D8`), with hazard yellow only for a few small
+  chevrons at the entry. The apron is no larger than the bots need. Paint
+  must never be the loudest thing in the frame.
 - Input and output trays are open, so buffer stacks are visible.
+- The hub's bays are lit inside, not black voids. Its roof bins are the
+  stock display: large enough to read at factory zoom, with stack height
+  showing how much is there.
+- Smoke puffs are off-white, and shrink and fade as they rise.
+
+## Terrain
+
+- Cliffs are real faces, not dark smears: steep, in the cliff colour, with a
+  crisp top edge and enough light on them to see facets. Elevation is minor
+  in this game, so a cliff's only job is to say "bots cannot go here" at a
+  glance.
+- Ground colour variation is subtle and broad. A sparse scatter of small
+  stones or tufts is welcome if cheap; it gives the eye a sense of scale.
+- Deposits (tinted ground plus scattered chunks) are right as they are.
 
 ## Status language
 
@@ -98,8 +131,14 @@ Readable without opening a panel:
 
 ## Haulers
 
-- Small rounded wheeled bots, about 1.2 m long: graphite chassis, white shell,
-  orange stripe, and a dark glossy visor panel across the front.
+- Small rounded wheeled bots: graphite chassis, white shell, orange stripe,
+  and a dark glossy visor panel across the front.
+- **From above, a hauler is mostly white with an orange stripe**; the dark
+  chassis is only glimpsed at the wheels. The visor is raked well back
+  (around 45°), like a windscreen, so the eyes face the camera.
+- **Size by readability**, not realism: at the default factory zoom a hauler
+  should be unmistakable, with its cargo and the direction it faces clear.
+  Grow them (nominal size and nav radius together) until that holds.
 - Cargo rides visibly on a flat bed, stacked.
 - Motion carries half the personality: slight suspension bob, a lean into
   turns, a small forward dip when braking, a brief pause before pulling out

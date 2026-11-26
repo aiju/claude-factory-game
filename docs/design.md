@@ -81,9 +81,12 @@ Everything that moves does so because of a request:
 
 - An input buffer below its target level **requests** the shortfall.
 - Anything in an output buffer is **on offer**.
-- The hub **offers** whatever it stores and **requests** any surplus, both at
-  the lowest priority. So producers feed consumers directly when they can, and
-  idle haulers tidy leftovers into the hub.
+- The hub **offers** whatever it stores, at the lowest priority: a consumer
+  is fed from a producer when one has stock.
+- The hub **takes** an item from a producer only when that producer's output
+  tray is full, or when nothing on the map consumes that item. So end
+  products flow steadily to the hub, intermediates wait at their producer for
+  direct pickup, and the hub only absorbs genuine surplus.
 - Later, a construction site is just a building that requests its own cost.
 
 ### Haulers
