@@ -76,7 +76,8 @@ function conifer(seed: number): THREE.BufferGeometry {
     const pos = cone.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) if (pos.getY(i) < -h / 2 + 0.2 && Math.hypot(pos.getX(i), pos.getZ(i)) > 0.01) pos.setY(i, pos.getY(i) - 0.28);
     cone.rotateY(hash2(k, 3, seed) * 6);
-    cone.translate((hash2(k, 4, seed) - 0.5) * 0.3, y + h / 2, (hash2(k, 5, seed) - 0.5) * 0.3);
+    // Tiers stay on the trunk's axis: a spruce is ragged in outline but dead straight.
+    cone.translate(0, y + h / 2, 0);
     const base = dark.clone().lerp(light, f * 0.9);
     // Undersides sit in shade.
     parts.push(faceted(cone, (p, face) => base.clone().multiplyScalar((0.8 + 0.4 * hash2(face, k, seed + 9)) * (p.y < y + 0.05 ? 0.6 : 1))));
@@ -246,7 +247,7 @@ export class SceneryView {
       const v = hash2(k, 1, seed);
       if (s.kind === 'tree') {
         const tint = new THREE.Color(0.82 + 0.3 * v, 0.86 + 0.24 * hash2(k, 2, seed), 0.84 + 0.22 * hash2(k, 3, seed));
-        trees[k % 3].push({ x: s.x, z: s.z, m: place(t, s.x, s.z, s.s * (0.9 + 0.2 * v), s.s, s.s * (0.9 + 0.2 * v), s.rot, 0.1, 0.05), tint, solid: k });
+        trees[k % 3].push({ x: s.x, z: s.z, m: place(t, s.x, s.z, s.s * (0.9 + 0.2 * v), s.s, s.s * (0.9 + 0.2 * v), s.rot, 0.1, 0.012), tint, solid: k });
       } else if (s.kind === 'snag') {
         snags.push({ x: s.x, z: s.z, m: place(t, s.x, s.z, s.s, s.s, s.s, s.rot, 0.1, 0.1), solid: k });
       } else {
